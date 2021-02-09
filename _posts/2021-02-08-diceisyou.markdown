@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "DiceCTF: (RE) diceisyou Writeup"
+title:  "DiceCTF: diceisyou (RE) by Vergil"
 date:   2021-02-08 18:01:37 -0500
 categories: ctf-writeup
 
@@ -8,8 +8,11 @@ categories: ctf-writeup
 
 ---
 
-# rev/dice-is-you:
-  
+# dice-is-you (RE):
+
+This was a fun and interesting challenge which required reverse engineering webassembly, something I haven't gotten the chance to do thus far.
+<br/><br/>
+
     hgarrereyn
     19 solves / 251 points
 
@@ -21,34 +24,44 @@ categories: ctf-writeup
     q: quit to main menu
     r: restart current level
     z: undo a move (only works for past 256 moves and super buggy)
-[dice-is-you.dicec.tf]
+
+## [dice-is-you.dicec.tf]
+<br/><br/>
 
 ## Initial Inspection
+
+
 Despite being a RE challenge, this one comes with just a link to a website. If we go to that website we are greeted with a game board enabled by javascript.
 
-The game is a "babaisyou" clone. The basic premise is that you have to reprogram the rules of the game in order to suceed. Winning the game means getting the character "you" on the object representing "sice" (NoVA slang for win/good).
+The game is a "babaisyou" clone. The basic premise is that you have to reprogram the rules of the game in order to succeed. Winning the game means getting the character "you" on the object representing "sice" (NoVA slang for win/good).
 
-You can watch me quickly solve the first 4 level in the gif below. 
+Unfortunately, the interesting game mechanics have very little to do with the actual CTF.
+
+You can watch me quickly solve the first 4 levels in the gif below.
+
+
 
 
 
 ![Game](/assets/diceisyou/diceisyou.gif)
 
-After completing the first four levels, you will be faced with the level which contains the real CTF problem.
+After completing the first four levels, you will be faced with the final level which contains the real CTF problem.
 
 ![lvl5](/assets/diceisyou/ctfproblem.gif)
 
-Upon first inspection, it the problem looks like it contains some sort of cryptography pattern stuff. The bottom left portion of the game screen shows the main mechanic that we are working with. If you place 5 shapes in a specific order, the purple block will light up. This leads us to expect that we need to place all 25 shapes in a specific 5 by 5 pattern so that all of the purple blocks in the upper left grid pattern will light up.
+Upon first inspection, the problem *looks* like it contains some sort of cryptography pattern stuff. 
 
-I always like to double check brute force feasibility for something like this, because why bother reversing logic if its too easily bypassed. So, lets see what are our chances of just guessing the pattern. We'll give the author the benefit of the doubt that there is only ONE possible pattern which lights up all the purple blocks at once. Since the author has done us the favor of pre-placing 5 blocks, that means that we're looking for 1 pattern in 20! options.
+The bottom left portion of the game screen shows the main mechanic that we are working with. If you place 5 shapes in a specific order, the purple block will light up. This makes me expect that we need to place all 25 shapes in a specific 5 by 5 pattern so that all of the purple blocks in the upper left grid pattern will light up, hopefully granting a flag.
+
+I always like to double check brute force feasibility for something like this. Why bother reverse engineering a lock if you can just rake it? Let's see what our chances are of just guessing the pattern. We'll give the author the benefit of the doubt that there is only ONE possible pattern which lights up all the purple blocks at once. Since the author has done us the favor of pre-placing 5 blocks, that means we're looking for 1 pattern in 20! options.
 
 nPr = 20! / (20-20)! = 2,432,902,008,176,640,000 possible permutations.
 
-Looks like bruteforce is out of the question.
+Looks like bruteforce is out of the question if we want this done in a reasonable amount of time.
 
-With that being the case, we need to understand the logic behind what is causing the purple blocks to light up, and we need to know how each symbol is represented within the logic.
+With that being the case, we need to understand the logic behind what is causing the purple blocks to light up, and we need to know how each symbol is represented within that logic.
 
-To do this, its time to hunt around on the webpage for what is actually going on.
+To do this, its time to snoop around on the webpage to see what is actually going on.
 
 ## Planning the Path Forward
 
@@ -59,11 +72,11 @@ We can check what files are actually being served by the website in chrome, and 
 
 From googling around it looks like there are a few tools which could potentially help us with this task.
 
-* https://www.pnfsoftware.com/jeb/demowasm (JEB has a web assembly decompiler apparently)
+* [https://www.pnfsoftware.com/jeb/demowasm](https://www.pnfsoftware.com/jeb/demowasm) (JEB has a web assembly decompiler apparently)
 
-* https://github.com/WebAssembly/wabt (Toolsuite for working with webassembly binaries, has a decompiler to a "human readable" language, and can output unoptimizied c soure code)
+* [https://github.com/WebAssembly/wabt](https://github.com/WebAssembly/wabt) (Toolsuite for working with webassembly binaries, has a decompiler to a "human readable" language, and can output unoptimizied c soure code)
 
-* https://github.com/andr3colonel/ghidra_wasm (Looks like someone wrote a web assembly module for ghidra)
+* [https://github.com/andr3colonel/ghidra_wasm](https://github.com/andr3colonel/ghidra_wasm) (Looks like someone wrote a web assembly module for ghidra)
 * We have chromes built in debugger which lets us debug the running program with breakpoints, watchpoints, and a memory view.
 
 
@@ -76,27 +89,29 @@ That leaves us with two options.
 * `wabt` decompilation combined with chrome's debugger.
 
 or
-* `wabt`s c source code generator, recompile the program in x86, and THEN put it in ghidra. 
+* `wabt`'s c source code generator, recompile the program in x86, and THEN put it in ghidra. 
 
-I spent a small bit of time trying to recompile the c output but ended up not feeling like dealing with trying to fix the c code to a point where I could get it to recompile. This led me to just go ahead use wabt's decompiler combined with chrome debugging.
+I spent a small bit of time trying to recompile the c output but ended up not feeling like dealing with trying to fix the c code to a point where I could get it to recompile. This led me to just go ahead use `wabt`'s decompiler combined with chrome debugging.
 
 
 The two of these tools combined should be more than enough for us to get a half-decent understanding of whats going on here.
 
 ## Starting the analysis
 
-Instructions for compiling wabt's toolset can be found on their github. Or I think its also just available in the ubuntu apt repositories.
+Instructions for compiling wabt's toolset can be found on their github. I think its also just available in the ubuntu apt repositories.
 
-https://github.com/WebAssembly/wabt
+[https://github.com/WebAssembly/wabt](https://github.com/WebAssembly/wabt)
 
 
 
 
 The following command gets us some decompiled output.
 
+
 `wasm-decompile app.wasm > diceisyou.dcmp`
 
-Lucky for us the author left some symols in the binary, so we get function names.
+Lucky for us the author left some symbols in the binary, so we get free function names to assist us.
+
 ```
 function get_tile_pos_custom(a:{ a:int, b:int, c:int, d:int }, b:int, c:int, d:int, e:int) {
   var w:int;
@@ -109,12 +124,12 @@ function get_tile_pos_custom(a:{ a:int, b:int, c:int, d:int }, b:int, c:int, d:i
 ```
 
 Lets look around for some key functions that we might care about:
-* menu_level()
-* level1()
-* level2()
-* level3()
-* level4()
-* level_flag_fin()
+* `menu_level()`
+* `level1()`
+* `level2()`
+* `level3()`
+* `level4()`
+* `level_flag_fin()`
 
 These seem to be initialization functions for the menu and each of the 5 levels. We can test this theory using the chrome debugger.
 
@@ -247,19 +262,19 @@ Taking a look at this code, the number of spawn_entity() function calls is prett
 
 Here we notice that the arguments are following a pretty particular pattern. The third argument is always -2, and the other arguments seem to be incrementing 1 at a time in almost a for loop fashion.
 
-In a grid based game board like this, its pretty much guaranteed that the sprites need to be populated using a coordinate system. This code is probably spawning a particular block, and I'd guess that its the wall block just because its the only block that appears this many times. 
+In a grid based game board like this, its pretty much guaranteed that the sprites need to be populated using a coordinate system. This code is probably spawning a particular block, and I'd guess that its the wall sprite just because its the only block that appears this many times. 
 
 Lets double check that this makes sense:
 
 ![lvl5breakpoint](/assets/diceisyou/level5grid.png)
 
-Looks correct. If you treat the first and second argument of each of the above calls as coordinates, all of them would line up perfectly with the locations of the walls in the top left sector. From this, we can almost surely tell that `spawn_entity()` follows the following function prototype:
+Looks correct. If you treat the first and second argument of each of the above calls as coordinates, all of them would line up perfectly with the locations of the wall sprites in the top left sector. From this, we can almost surely tell that `spawn_entity()` follows the following function prototype:
 
 `spawn_entity(x_coord, y_coord, block_type)`
 
-We can combine the knowledge of our spawn_entity() calls, and our coordinate map, to ID every sprite type on the map and figure out what number represents each of them. We know this information will be at least be useful since we know that the game logic for the purple blocks has to take into account which blocks are in a row to consider the row 'correct'.
+We can combine the knowledge of our `spawn_entity()` calls, and our coordinate map, to ID every sprite type on the map and figure out what number represents each of them. We know this information will at least be useful since we know that the game logic for the purple blocks has to take into account which blocks are in a row to consider the row 'correct'.
 
-After an annoying amount of using find and replace in vscode, we can fill in the next giant block of spawn_entity calls.
+After an annoying amount of using find and replace in vscode, we can fill in the values for the next giant block of spawn_entity calls that we find in `level_flag_fin()`
 
 ```
   spawn_entity(1, 14, -2); 
@@ -368,11 +383,11 @@ As a side note, while checking out the debugger during all this, I realized chro
 
 ![sprites](/assets/diceisyou/bitmap.png)
 
-When we look at this image, we realize that all those values we spent so much time checking can just be deduced by looking at the position of the sprite in this image if you treat it as a 30x12 grid...
+When we look at this image, we realize that all those values we spent so much time checking could've potentiall just been deduced by looking at the position of the sprite in this image if you treat it as a 30x12 grid.... Oh well.
 
 
 
-Knowing the values of the sprites is nice. Lets try and look for the logic which actually lights up the purple blocks when 5 symbols get placed next to them.
+Knowing the values of the sprites is nice. Lets try and look for the logic which actually lights up the purple blocks when 5 symbols get placed in order next to them.
 
 Searching through the decompilation some more, we find a couple functions with names that sound like the kind of behavior we are looking for:
 
@@ -438,7 +453,9 @@ Its not particularly nice to look at, but if you take the time to read through t
 
 My teammate playoff-rondo decided to write this code in python to make it a little easier to read and execute if we needed.
 
-```python
+
+
+{% highlight python %}
 def code(a,b,c,d,e):
     # a-e is blocks 0-5
     check1 = (a&255)*42
@@ -448,10 +465,12 @@ def code(a,b,c,d,e):
     check4 = ((d&255)^z)+check3
     check5 = (((e&255)<<1)+check4)&255
     return check5
-```
+{% endhighlight %}
 
 
 When we run this code with the known working values and the non working values, the output didn't seem to be anything in particular for the working case vs some false test cases.
+
+![code.py1](/assets/diceisyou/working_non_working.png)
 
 ![code.py1](/assets/diceisyou/nonworking_code_test.png)
 
@@ -669,7 +688,9 @@ This function looks like its some sort of switch case statement table.
 
 Upon further inspection, it is, though it individually accounts for every possible input value up to the max i of 210. 
 
-The function subtracts 138 from the input value (the sprite decimal values), then uses that value as an index to jump to whatever label is at that index in the br_table. This kind of sucks because it looks like the labels are ordered in the code based on the output value instead of in order of how they appear in the table. I decided the laziest way to reverse this table was to just use the debugger. By placing the symbols all within the grid (even in the incorrect order) all the symbols should end up getting processed by this code so we can just set a breakpoint at the end of the table code in the debugger and look at what the function input was versus what the output was until we've recorded all the pairs.
+The function subtracts 138 from the input value (the sprite decimal values), then uses that value as an index to jump to whatever label is at that index in the br_table. This kind of sucks because it looks like the labels are ordered in the code based on the output value instead of in order of how they appear in the table. 
+
+I decided the laziest way to reverse this table was to just use the debugger. By placing the symbols all within the grid (even in the incorrect order) all the symbols should end up getting processed by this code so we can just set a breakpoint at the end of the table code in the debugger and look at what the function input was versus what the output was until we've recorded all the pairs.
 
 
 In the below photo, all we have to do is look at var7 for the input value, and the output value will appear in var35.
@@ -712,7 +733,9 @@ anything else -> 0
 
 Knowing these now, let's go back to our python code, and try to run it with the updated values.
 
-![code.py2](/assets/diceisyou/cod_test.png)
+![code.py1](/assets/diceisyou/working_non_working.png)
+
+![code.py2](/assets/diceisyou/code_test.png)
 
 This makes much more sense. For the working cases, the 5 numbers will cause `code()` to return zero after all the math is run on them.
 
@@ -731,7 +754,7 @@ Z3 will allows us to feed it the `code()` function, the 25 possible input charac
 
 I'm not a Z3 expert, and was too sleep deprived to read through the documentation at this point, so I took all this information and handed it off to my teammate playoff-rondo who is way more familiar with Z3 and went to sleep. He constructed this script, which properly solves the mathematical side.
 
-```python=
+{% highlight python %}
 from z3 import *
 import IPython
 
@@ -796,7 +819,7 @@ if s.check():
             print(str(m[y],).ljust(3," "),"|",end="")
         print("\n"+"_"*25)
 IPython.embed()
-```
+{% endhighlight %}
 
 
 This code outputs a grid containing the correct values.
@@ -807,5 +830,13 @@ This code outputs a grid containing the correct values.
 Lets try this as input in the actual game!
 
 ![Solved](/assets/diceisyou/Solved.gif)
+
+Looks like that worked!
+
+Flag:
+
+dice{d1ce_1s_y0u_is_th0nk_73da6}
+
+Great challenge!
 
 [dice-is-you.dicec.tf]: http://dice-is-you.dicec.tf
