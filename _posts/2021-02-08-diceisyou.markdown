@@ -25,7 +25,7 @@ This was a fun and interesting challenge which required reverse engineering weba
     r: restart current level
     z: undo a move (only works for past 256 moves and super buggy)
 
-## [dice-is-you.dicec.tf]
+### [dice-is-you.dicec.tf]
 <br/><br/>
 
 ## Initial Inspection
@@ -62,7 +62,7 @@ Looks like bruteforce is out of the question if we want this done in a reasonabl
 With that being the case, we need to understand the logic behind what is causing the purple blocks to light up, and we need to know how each symbol is represented within that logic.
 
 To do this, its time to snoop around on the webpage to see what is actually going on.
-
+<br/><br/>
 ## Planning the Path Forward
 
 We can check what files are actually being served by the website in chrome, and it turns out that we're getting served up a javascript file and a webassembly file. A quick look through the javascript file shows that nothing in there has anything to do with the game logic itself, so that leaves the webassembly file. We can download the .wasm using chrome, and then look around at what tools are available for helping us to reverse engineer it.
@@ -95,7 +95,7 @@ I spent a small bit of time trying to recompile the c output but ended up not fe
 
 
 The two of these tools combined should be more than enough for us to get a half-decent understanding of whats going on here.
-
+<br/><br/>
 ## Starting the analysis
 
 Instructions for compiling wabt's toolset can be found on their github. I think its also just available in the ubuntu apt repositories.
@@ -742,6 +742,8 @@ This makes much more sense. For the working cases, the 5 numbers will cause `cod
 We now know the constraints for creating a pattern where all 10 purple blocks will light up.
 
 
+<br/><br/>
+## Finding the Solution
 Unfortunately, knowing the constraints doesn't mean we can just arrange the blocks properly. We have to be particular about where we place the blocks because each block has to be in the correct place TWICE. Once for each time it is in a pattern of 5 from the purple blocks. This means we can't just guess and check or slowly build the patten up from the beginning because a pattern could be correct left/right, but its block positions can still break the up/down pattern.
 
 This kind of problem needs to be solved be either intelligent recursion, or simply using a solver like z3 or angr.
