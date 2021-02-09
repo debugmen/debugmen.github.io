@@ -1,6 +1,7 @@
 ---
 layout: post
 title:  "DiceCTF: diceisyou (RE) by Vergil"
+author: Vergil
 date:   2021-02-08 18:01:37 -0500
 categories: ctf-writeup
 
