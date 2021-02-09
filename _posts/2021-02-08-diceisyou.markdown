@@ -693,14 +693,15 @@ The function subtracts 138 from the input value (the sprite decimal values), the
 I decided the laziest way to reverse this table was to just use the debugger. By placing the symbols all within the grid (even in the incorrect order) all the symbols should end up getting processed by this code so we can just set a breakpoint at the end of the table code in the debugger and look at what the function input was versus what the output was until we've recorded all the pairs.
 
 
-In the below photo, all we have to do is look at var7 for the input value, and the output value will appear in var35.
+In the below photo, all we have to do is look at var5 for the input value (var7 will be the value with 138 subtracted) and the output value will appear in var35.
 In this case, we can see that a 192 input, ends up with a value of 212 being returned.
+
 
 ![sprites](/assets/diceisyou/debugtable.png)
 
 This will take us a minute or two, but after 25 times, we should know all 25 translation pairs.
 
-We record them to the following table for reference:
+We record them (with the 138 subtracted off the original values) to the following table with the symbols written next to them for reference 
 Conversion Table for get_code_value
 ```
 0   -> 192    Triangle Empty
