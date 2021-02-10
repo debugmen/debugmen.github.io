@@ -28,7 +28,7 @@ twitter_username: None
 github_username:  debugmen
 
 # Build settings
-theme: jekyll-shell-theme
+theme: tareqdandachi/jekyll-shell-theme
 plugins:
   - jekyll-feed
 
