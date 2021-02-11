@@ -1,15 +1,11 @@
 ---
 layout: post
-title:  "DiceCTF: Babier CSP (WEB) by Etch"
+author: Etch
+title:  "DiceCTF: Babier CSP"
 date:   2021-02-09 00:49:32 -0500
-categories: ctf-writeup
-
-
-
+categories: CTF-writeup
+ctf-category: WEB
 ---
-
-
-
 
 # Babier CSP (web):
 

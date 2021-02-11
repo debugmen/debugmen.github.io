@@ -18,19 +18,48 @@
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
 
-title: Debugmen CTF Writeups
+title: Debugmen
 email: debugmen.ctf.team@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
-  Blog to publish Debugmen's CTF solutions.
+  Welcome to the Debugmen blog. We use this site to post tools, security findings, CTF writeups and anything else we find worthy of release to the public.
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
 twitter_username: None
 github_username:  debugmen
 
 # Build settings
-theme: minima
+theme: jekyll-dash
 plugins:
   - jekyll-feed
+  - jekyll-paginate
+  - liquid-md5
+
+paginate: 10
+paginate_path: "/blog/page:num/"
+
+members:
+  - "Vergil"
+  - "Etch"
+  - "playoff-rondo"
+  - "Veryyes"
+
+# jekyll-tagging (optional)
+tag_permalink_style: pretty
+tag_page_layout: tag_page
+tag_page_dir: tag
+dash:
+  date_format: "%b %-d, %Y"
+
+  # generate social links in footer
+  # supported colors: green, red, orange, blue, cyan, pink, teal, yellow, indigo, purple
+  social_links:
+
+    - url: https://github.com/debugmen
+      icon: github-square
+      color: green
+  show_author: true
+  avatar_source: github
+  github_username: debugmen
 
 # Exclude from processing.
 # The following items will not be processed, by default.

@@ -1,0 +1,13 @@
+---
+layout: default
+title: members
+permalink: /members/
+---
+{% unless site.dash.show_author == false %}
+  {% include author.html %}
+{% endunless %}
+<h1>Members list:</h1>
+
+{% for member in site.members %}
+    <h2>{{member}}</h2>
+{% endfor %}
