@@ -56,7 +56,8 @@ struct malloc_chunk {
 When we free a chunk on the heap, the chunks go in certain bins depending on the size. This is so the heap allocator can reuse those chunks if the sizes fit. For example, if you allocate 0x20 (32) bytes and then free that chunk, the next time 0x20 (32) bytes gets allocated, the heap allocator will look into the fastbin for size 0x30 (fits allocated size + heap meta-data size, in this case 0x10 bytes because its an x64 binary) and returns a pointer to that chunk.
 
 Using gdb-gef, we can examine the state of the bins with the `heap bins` command.
-```gef➤  heap bins
+```
+gef➤  heap bins
 [+] No Tcache in this version of libc
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────── Fastbins for arena 0x7fd36cac3b20 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 Fastbins[idx=0, size=0x20] 0x00
