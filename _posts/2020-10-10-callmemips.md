@@ -14,9 +14,11 @@ ctf-category: PWN
 Chain calls to multiple imported methods with specific arguments and see how the differences between 64 & 32 bit calling conventions affect your ROP chain.
 ### Disassembly
 main function calls vulnerable call pwnme
+
 ![](https://i.imgur.com/HWccWbN.png)
 
 pwnme function 
+
 ![](https://i.imgur.com/FvCln4L.png)
 
 ## Eumulation
