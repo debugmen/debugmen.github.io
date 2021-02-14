@@ -6,8 +6,7 @@ date:   2020-09-20 18:01:37 -0500
 categories: CTF-writeup
 ctf-category: PWN
 ---
-
-# Nothing More to Say 2020 - Tokyo Westerns CTF 2020
+# Nothing More to Say
 
 ## Challenge Description
 ![](https://i.imgur.com/1SM5lq6.png)
