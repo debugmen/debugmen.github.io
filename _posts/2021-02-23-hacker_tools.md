@@ -68,7 +68,7 @@ Now we have an idea of what we are trying to accomplish. Let's move onto actuall
 ## Finding a means to exploit
 
 There are three different input parameters on the site.
-One is a CORS redirector, one is a page previer, and one is a payload generator.
+One is a CORS redirector, one is a page previewer, and one is a payload generator.
 
 
 I'll start with the payload generator. If we look at the actual elements of the page, we can see the javascript element that contorls the payload generator.
