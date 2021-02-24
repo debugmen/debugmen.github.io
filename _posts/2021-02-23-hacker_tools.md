@@ -55,8 +55,9 @@ Just from looking at the release notes, it's safe to assume that this is going t
 &nbsp;
 
 
-This explains that in order to make requests to the server, we need to first request a token using PUT and a specific header.
-The request is to http://169.256.169.254 and the header is X-aws-ect-metadata-token: "21600" 
+This explains that in order to make requests to the server, we need to first do a PUT request with a specific header.
+The request is to http://169.256.169.254 and the header that needs included is `X-aws-ect-metadata-token: "21600"`.
+
 This all has to be done locally from the aws instance though. 
 There is no way to access it outside of the server. This is when you should start thinking about [SSRF](https://portswigger.net/web-security/ssrf).
 Now we have an idea of what we are trying to accomplish. Let's move onto actually doing it.
@@ -262,7 +263,7 @@ Once you get the token, you can make any get request to the server. Reuests are 
 The only difference is we add a different header with our token.
 
 
-X-aws-ec2-metadata-token: *token*
+`X-aws-ec2-metadata-token: *Insert token here*`
 
 
 In my code I show all the directories with my first get request, and then I show the credentials with my 2nd one. If you have no clue about [AWS credentials](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html) like me, googling brings it up quickly.
