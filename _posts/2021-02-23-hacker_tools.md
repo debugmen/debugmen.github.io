@@ -1,7 +1,7 @@
 ---
 layout: post
 author: Etch
-title:  "Tenable CTF: Hackers Tools"
+title:  "Tenable CTF: Hacking Toolz"
 date:   2021-02-23 18:32:53 -0500
 categories: CTF-writeup
 ctf-category: WEB
