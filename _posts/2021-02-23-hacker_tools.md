@@ -59,6 +59,8 @@ This explains that in order to make requests to the server, we need to first do 
 The request is to http://169.256.169.254 and the header that needs included is `X-aws-ect-metadata-token: "21600"`.
 
 This all has to be done locally from the aws instance though because is no way to access it outside of the server. This is when you should start thinking about [SSRF](https://portswigger.net/web-security/ssrf).
+
+
 Now we have an idea of what we are trying to accomplish. Let's move onto actually doing it.
 
 
@@ -71,7 +73,7 @@ There are three different input parameters on the site.
 One is a CORS redirector, one is a page previewer, and one is a payload generator.
 
 
-I'll start with the payload generator. If we look at the actual elements of the page, we can see the javascript element that contorls the payload generator.
+I'll start with the payload generator. If we look at the actual elements of the page (F12 in chrome), we can see the javascript element that controls the payload generator.
 
 
 &nbsp;
@@ -88,9 +90,11 @@ We see it never actually uses our input at all. It simply puts a random value in
 
 Okay, that's one less thing we have to think about, so let's move onto the site previewer.
 
-It does exactly what it says. If we type in a link, we download a pdf screenshot of that link. This tells us that the server is actually visiting the link we send it.
-Redirecting their server to your own should cross your mind at this point. 
-We could have them visit our server and then execute whatever we wanted while they take a screenshot. Sounds like the perfect setup to leak some local info.
+It does exactly what it says. If we enter a URL, we receive a pdf containing a screenshot of the contents at that URL. 
+This shows us that the server is actually visiting the link we send it.
+Redirecting their server to your own server should cross your mind at this point. 
+We could have them visit our server and then execute whatever we wanted while they sit there waiting to take a screenshot. 
+Sounds like the perfect setup to leak some local info.
 
 
 Lastly there is the site redirector. It tells us it'll slap [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) on anything. However, when we try to use it, it says Access Denied.
@@ -124,11 +128,14 @@ You'll also want to familiarize yourself with Flask. It allows you to easily cod
 
 
 Your webserver is up and running!
-
 You should be able to see all interactions on your local Ngrok web interface.
 
 
 Now I'll show my entire code that I wrote after the fact, and go through it step by step.
+
+
+&nbsp;
+
 
 server.py belongs in the root, and index.html belongs in the template directory.
 
@@ -258,7 +265,7 @@ If you can understand these concepts, the challenge is easy from here.
 
 ## Part 2: Getting the Credentials
 
-Once you get the token, you can make any get request to the server. Reuests are going to made exactly the same because they need to be made locally through a proxy.
+Once you get the token, you can make any get request to the server. The requests in my code are the same in the sense that they need to be made locally through their proxy.
 The only difference is we add a different header with our token.
 
 
@@ -271,11 +278,22 @@ Once you see all the directories, you should see the IAM role and just navigate 
 Here is what you'll see if you use my code.
 
 
+&nbsp;
+
+
+
 ![screenshot](/assets/hackertools/token_dir_keys.png)
+
+&nbsp;
+
+&nbsp;
 
 
 We can see that my SSRF stole their token, all the files listings inside of meta-data, and most importantly the credentials. It took me a bit to actually figure out
 what to do with these credentials, but I eventually figured out you had to install aws cli and set your credentials file.
+
+&nbsp;
+
 
 ```
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -285,7 +303,14 @@ sudo ./aws/install
 vim ~/.aws/credentials
 ```
 
+&nbsp;
+
+
 Then put your key id, access key, and token in the credentials file.
+
+
+&nbsp;
+
 
 ```
 [default]
@@ -294,7 +319,13 @@ aws_secret_access_key = bl72/EKToTt2wPbiTsDKNxSpzbNue6EqON4OlZFM
 aws_session_token = QoJb3JpZ2luX2VjEN7//////////wEaCXVzLWVhc3QtMiJGMEQCIB4jp9Q2hBMLVP3QSC71To5r04yn/ORANst0HT7gWo05AiBwLY+ClrD6Vr4k2dTjKiftxxVNz5x+DY5HKST2gT0oeCq9Awjn//////////8BEAAaDDkwOTU3MjA2NDY3MiIM4Rsz6eMhjc026EGbKpEDLLeVyyaojz9KNytep/tIpn+IZvmL7Gt8jL5AJ2NI2rmY+5HBUr8w/gu7d4NbCwkfibBAuKgDHeyYhE6Neva2L1DxU22A6Hpa4Z9P7hb7p7FJWgqfADz5XUP/9BGbxy3lRxXgAhLjCK90P7KSmOW/iksIDiS7LfRGBYEWy2+fw3rMAoxSltWTZAOiiQtzc7MKQzK8p97pdZRRCfl2mZZsnq+HC3Hxdw1rTj1Uo8+mXA5Y4pl6KGrqj8gjZbQuLFTmQ6f3QShWHzqU/FO11A8uS1KOkEJGDIEaW0WCmMCdIXktuF9ooMtP7jR8Ygoun6+5EQGxtdQ8csSLSUsBc4FfOzVeLUaqT9FQn/Ydzrc9K0CqvuL5syNl9BMTa63Uu7EERgPXx/iolwE7WcaQFQklJN6fsG1WvBEbYZ48fTOOoO6+trTCvwIG7rbZBdzXxe1k/of6QmZT4v+9OvJVoKBL2cYLKpUlHA21dQ8c97swwshH6WtMtvBQTTuZ8Z6RtW4zULF/5Wfrm5R/Y3mBa0ZWeicwzLPSgQY67AEvQif56GMriYZL/cnxrT4dk9sGCrQSZENmlO1yWzh/UvQ+ezozja6HCdPxMpIjyJt5qhe0xUE/3B+WjPBRitSG/sh5BDpvKAN/EGsn76lkLBuk9FQe0VRl8dSUvGOZcyDBxQxqlZRCxeS7e3HReCYKjM9QzZUjqw+uQdTh1GGhO7VIO8u8zsQif798doQygsY+ncuG4iic++NMHmHw4GwyPX2eWa6GycV4HO3BGshOZEAXfHztE+vn4kamnXBIqvUA+46sNwHo2jVn4f6fD0vpKIXeKLIYCUzfcj+AfZ9ulv1+G8soUB3a6Ujk4Q==
 ```
 
+&nbsp;
+
+
 Once you do this, you can traverse through their s3. 
+
+&nbsp;
+
 
 ```
 └─▪ aws s3 ls
