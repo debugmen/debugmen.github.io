@@ -7,7 +7,7 @@ categories: CTF-writeup
 ctf-category: WEB
 ---
 
-# Hacker Tools (web):
+# Hacking Toolz (web):
 
 
 Hacker tools was a pretty bascic SSRF challenge with AWS Instance Metadata Service Version 2. 
