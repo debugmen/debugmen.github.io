@@ -284,7 +284,6 @@ Here is what you'll see if you use my code.
 
 ![screenshot](/assets/hackertools/token_dir_keys.png)
 
-&nbsp;
 
 &nbsp;
 
