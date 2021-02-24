@@ -58,8 +58,7 @@ Just from looking at the release notes, it's safe to assume that this is going t
 This explains that in order to make requests to the server, we need to first do a PUT request with a specific header.
 The request is to http://169.256.169.254 and the header that needs included is `X-aws-ect-metadata-token: "21600"`.
 
-This all has to be done locally from the aws instance though. 
-There is no way to access it outside of the server. This is when you should start thinking about [SSRF](https://portswigger.net/web-security/ssrf).
+This all has to be done locally from the aws instance though because is no way to access it outside of the server. This is when you should start thinking about [SSRF](https://portswigger.net/web-security/ssrf).
 Now we have an idea of what we are trying to accomplish. Let's move onto actually doing it.
 
 
