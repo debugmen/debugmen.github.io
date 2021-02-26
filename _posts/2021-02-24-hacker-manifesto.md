@@ -19,7 +19,7 @@ We found this file on a compromised host. It appears to contain data, but we're 
 We are given a single file with zero context other than it's name.
 Let's check it out.
 
-[hacker_manifesto.txt](/assets/diceisyou/working_non_working.png)
+[hacker_manifesto.txt](/assets/hackermanifesto/hacker_manifesto.txt)
 
 
 ```
