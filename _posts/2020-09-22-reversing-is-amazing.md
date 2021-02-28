@@ -26,7 +26,7 @@ Although it would've helped if I knew more about libcrypto/libssl, with some goo
 
 ![Main](/assets/tokyo_western_2020/reverseing_is_amazing/main_func.png)
 
-The first while loop is loading some data at *0x555555555100* to the stack. *puVar6* in this case. Then it *memcpy*s the command line argument to *plain_text* and creates an rsa struct and calls *BIO_new_mem_buf*, which initialzes a new struct for a key (I think) at *local_a78* which points to where *puVar6* is pointing.
+The first while loop is loading some data at *0x555555555100* to the stack, *puVar6* in this case. Then it *memcpy*s the command line argument to *plain_text* and creates an rsa struct and calls *BIO_new_mem_buf*, which initialzes a new struct for a key (I think) at *local_a78* which points to where *puVar6* is pointing.
 The resulting pointer gets used in *d2i_PrivateKey_bio*. At this point whatever is at *0x555555555100* is definitly a private key of some sort, so I ripped it out and base64'd it. We get a PEM file missing its header and footer, so I added the corresponding ones for an RSA Private Key.
 ```
 -----BEGIN RSA PRIVATE KEY-----

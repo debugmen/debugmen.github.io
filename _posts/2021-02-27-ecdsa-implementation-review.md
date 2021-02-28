@@ -86,9 +86,9 @@ b'f3ccfd5877ec7eb886d5f9372e97224c43f4412ca8eaeb567f9b20dd5e0aabd5'
 
 Without much background in how ESDA works I looked up the wikipedia page for it and found that if you use the same **k** value, then the private key can be recovered.
 
-![wikipedia lol](assets/tenable-2020/ECDSA/ECDSA_wiki.PNG)
+![https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm](/assets/tenable-2020/ECDSA/ECDSA_wiki.PNG)
 
-In this case, **k** is the `nonce1` and `nonce2` variables and they are both the same. 🤔🤔
+In this case, **k** is the `nonce1` and `nonce2` variables and they are both the same value. 🤔
 
 Furthermore, the wikipedia page also tells you how to recover such private key in this situation. So all thats left to do is recover the private key and use that key as the key to AES decrypt the flag
 

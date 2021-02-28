@@ -56,11 +56,11 @@ if(isset($_POST["do_encrypt"]))
 You'll notice that the IV and encryption key are the same for every request and that the encryption scheme is in ECB mode i.e. message blocks encrypt to the same cipher text block regardless of position in the message
 
 ## Leaking parts of the encrypted flag
-Since we control the first portion of the cipher text followed by the encrypted flag and know the block size already via the source, we can encrypt a message block where all but the last byte in the block is know. This allows up to check what value that last byte is by checking all possible values for that byte by sending queries to the website.
+Since we control the first portion of the cipher text followed by the encrypted flag and know the block size already via the source, we can construct a message block where all but the last byte in the block is know and encrypt it. This allows us to check what value that last byte is by checking all possible values for that byte by sending more messages to the website to encrypt.
 
 For example:
 
-let our first message `M1 = aaaaaaaaaaaaaaa`. which is 15 'a' characters, one short of the block size. This means the first block will contain 15 'a's and the first character of the flag. So when we encrypt `M1` we get some cipher text block we call `C1`. Next we guess and check for that last character by encrypting `M1' = M1 + X`
+Let our first message `M1 = aaaaaaaaaaaaaaa`. which is 15 'a' characters, one short of the block size. This means the first block will contain 15 'a's and the first character of the flag. So when we encrypt `M1` we get some cipher text block we call `C1`. Next we guess and check for that last character by encrypting `M1' = M1 + X`
 where `X` is the single letter we are guessing. We keep trying different `X`s until `M1'` encrypts to `C1` meaning we've correctly guessed the first character of the flag. In this case the first letter is 'f'.
 
 We repeat this process, adding on each known letter of the flag to our message until we get the whole flag.
@@ -76,7 +76,7 @@ and so forth.
 
 ## Solution
 
-For my solution, instead of using an inital 15 'a's to start guessing with, I used 79 = (4*16) + 15 'a's to pad my message with an extra 4 blocks of 'a's in case the flag is better than a single block.
+For my solution, instead of using an inital 15 'a's to start guessing with, I used 79 = (4*16) + 15 'a's to pad my message with an extra 4 blocks of 'a's in case the flag is bigger than a single block.
 
 ```
 import requests
