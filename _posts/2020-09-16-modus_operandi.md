@@ -1,7 +1,7 @@
 ---
 layout: post
 author: Veryyes
-title: Modus Operandi
+title: "CSAW 2020 CTF: Modus Operandi"
 date: 2020-09-16 22:26:14 -0500
 categories: CTF-writeup
 ctf-category: Crypto

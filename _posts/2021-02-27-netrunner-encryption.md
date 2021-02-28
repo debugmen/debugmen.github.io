@@ -1,7 +1,7 @@
 ---
 layout: post
 author: Veryyes
-title: Netrunner Encryption
+title: "Tenable CTF: Netrunner Encryption"
 date: 2021-02-27 17:17:50 -0500
 categories: CTF-writeup
 ctf-category: Crypto

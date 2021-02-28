@@ -1,7 +1,7 @@
 ---
 layout: post
 author: Veryyes
-title: Flask Caching
+title: "CSAW 2020 CTF: Flask Caching"
 date: 2020-09-12 12:35:32 -0500
 categories: CTF-writeup
 ctf-category: Web

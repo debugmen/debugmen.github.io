@@ -1,7 +1,7 @@
 ---
 layout: post
 author: Veryyes
-title: reversing is amazing
+title: "Tokyo Westerns CTF 2020: reversing is amazing"
 date: 2020-09-22 20:21:22 -0500
 categories: CTF-writeup
 ctf-category: RE
