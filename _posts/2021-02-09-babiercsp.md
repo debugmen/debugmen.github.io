@@ -5,7 +5,7 @@ title:  "DiceCTF: Babier CSP"
 date:   2021-02-09 00:49:32 -0500
 categories: CTF-writeup
 ctf-category: WEB
-tags: Etch, WEB, CSP
+tags: etch web csp
 ---
 
 # Babier CSP (web):
