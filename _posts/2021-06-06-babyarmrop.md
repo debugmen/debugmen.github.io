@@ -9,6 +9,7 @@ ctf-category: PWN
 
 # BabyArmROP (PWN)
 aarch64 rop ret2csu
+
 Note: My exploit was a little overboard because you didn't need to leak the stack. Using an address from the GOT is works for ret2csu.
 
 ## Description
@@ -85,7 +86,7 @@ from pwn import *
 io = remote("127.0.0.1",1337)
 
 name = b"playoff-rondo"
-message = b"gang gang
+message = b"gang gang"
 
 io.sendlineafter(b"name: ",name)
 io.sendlineafter(b"message now: ",message)
@@ -102,7 +103,7 @@ si 27
 p $x0-0x40
 ```
 
-Running `gdb-multiarch -x gdb_script ./vuln./vuln` will connect and then print the binary base address:
+Running `gdb-multiarch -x gdb_script ./vuln/vuln` will connect and then print the binary base address:
 
 ![](https://i.imgur.com/3CsEhFY.png)
 
@@ -332,7 +333,7 @@ io.interactive()
 ```
 ![](https://i.imgur.com/oG1HJaw.png)
 
-Unfortunately, a long name will be apart of a buffer overflow which is why the binary crashes, luckly we still control what `pc will be`.
+Unfortunately, a long name will be apart of a buffer overflow which is why the binary crashes, luckly we still control what `pc` will be.
 
 We can rop to the address directly after the read call to continue execution and print our leak. That address is `vuln+0x1c`
 
