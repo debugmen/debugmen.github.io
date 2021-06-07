@@ -64,7 +64,7 @@ The updated `run.sh` now lookos like:
 ```bash
 #!/usr/bin/env bash
 
-socat tcp-listen:1337,fork,reuseaddr exec:"/vuln/qemu-aarch64 -L /vuln/lib -strace -g 1234 -nx /vuln/vuln"
+socat tcp-listen:1337,fork,reuseaddr exec:"/vuln/qemu-aarch64 -L /vuln/ -strace -g 1234 -nx /vuln/vuln"
 ```
 
 Then built the docker image with `docker build -t zh3r0_babyarm .`
