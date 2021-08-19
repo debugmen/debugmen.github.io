@@ -2,7 +2,7 @@
 layout: post
 author: playoff-rondo
 title:  "Custom CTF Platforms: Part 2"
-date:   2021-08-018 2:01:37 -0500
+date:   2021-08-18 2:01:37 -0500
 categories: general
 ---
 This is part 2 of the Custom CTF Platforms posts, where I explain some of the features and mistakes I made in the CTF platforms I have created
