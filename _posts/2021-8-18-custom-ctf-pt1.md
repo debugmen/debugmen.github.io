@@ -5,8 +5,6 @@ title:  "Custom CTF Platforms: Part 1"
 date:   2021-06-05 1:01:37 -0500
 categories: general
 ---
-
-# Custom CTF Platforms Pt 1
 Over the past 8ish years I've played CTFs, I created a couple CTF platforms with a some help from some friends. This was before CTFd was a thing and every CTF seemed to have their own custom platform.
 
 This is part 1 of 2 posts where, I'm going to revist two of my platforms and go over some of the features I implemented and some mistakes made during its creation.
