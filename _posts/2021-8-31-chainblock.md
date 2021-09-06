@@ -9,6 +9,10 @@ ctf-category: PWN
 
 This was a simple challenge that doesn't really need a writeup, however I am addicted to Binaryninja so maybe I can get a free license out of this.
 
+## Update
+This writeup ended up winning the best use of binaryninja and netted me a free license
+![win](/assets/chainblock/win.png
+
 # Understanding the Challenge
 We were given the binary and source of the challenge as well as the interpreter and libc, however I decided not to look at the source or open the binary in a disassembler. A teammate had mentioned that there was a `gets` call in the binary, so I decided to write a solve script with this information.
 
