@@ -2,13 +2,14 @@
 layout: post
 author: playoff-rondo
 title:  "Battelle Winter CTF: HolyGrailOfRop"
-date:   2021-01-14 6:01:37 -0500
+date:   2022-01-14 6:01:37 -0500
 categories: CTF-writeup
 ctf-category: PWN
 ---
 HolyGrailOfRop was an automated exploit generation challenge for the Battelle Winter Beginner CTF made by ScotchAndSplenda.
 
 We were only given a host and port. `nc ctf.battelle.org 30042`
+
 Connecting gives us a short message and then the binary.
 
 The goals of the challenge are
@@ -128,7 +129,7 @@ find_vuln("./binary")
 
 Running this will pull down a new binary and find the vulnerable function.
 
-![[vuln_discover.png]]
+![vuln_discover](/assets/holygrail/vuln_discover.png)
 
 # Discover the correct input to reach the bug
 Knowing where the vulnerable function is great, however to reach this function, we have to find the correct 3 inputs to reach this function. This is something that angr would be great for, but we love binaryninja more so my solve will just be using binja to determine the correct sequence of strings.
@@ -223,11 +224,11 @@ print("[!] Inputs required: ",inputs)
 
 The output of running this multiple times for different binaries is:
 
-![[inputs.png]]
+![inputs](/assets/holygrail/inputs.png)
 
 And we can confirm these are the correct inputs by running the binary and sending the 3 inputs and then a large string as the fourth input to smash the stack.
 
-![[crash.png]]
+![crash](/assets/holygrail/crash.png)
 
 # Exploit the bug
 To debug our exploit, I added the following code after generating the input array.
@@ -252,9 +253,10 @@ io.interactive()
 
 Running this, we can see the segfault with our `b"BBBB"`.
 
-![[gdb_crash.png]]
+![gdb_crash](/assets/holygrail/gdb_crash.png)
 
 I didn't know how long my ropchain would be so the first thing I did was pivot and call read with much more bytes. The updated payload is:
+
 ```python
 rop = ROP(elf)
 leave_ret = rop.find_gadget(['leave','ret'])[0]
@@ -305,7 +307,7 @@ Looking at my own libc however I noticed that the `write` function is the functi
 
 This may be luck, but I spawned a `pwndocker` container and checked the libc inside there and `write` was `0xa0` bytes away from the `read` as well even though they had different hashes.
 
-![[libcs.png]]
+![libcs](/assets/holygrail/libcs.png)
 
 Using this information, if we can create a ropchain that grabs the resolved address of `read` and add `0xa0` to it, then we have the address of `write`, which we can call to get ourselves a libc leak. 
 
@@ -348,7 +350,7 @@ io.interactive()
 
 In GDB, we can confirm.
 
-![[add_eax.png]]
+![add_eax](/assets/holygrail/add_eax.png)
 
 Also lucky that there is a `jmp eax` gadget that we can use to call write.
 
@@ -391,11 +393,11 @@ print("[!] Leak:", hex(leak))
 io.interactive()
 ```
 
-![[leak.png]]
+![leak](/assets/holygrail/leak.png)
 
 We can use an online libc finder with our leak. ([https://libc.blukat.me/](https://libc.blukat.me/))
 
-![[libc_search.png]]
+![libc_search](/assets/holygrail/libc_search.png)
 
 Luckily, there were only a few and I guessed it on my first try (libc6-i386_2.28-10_amd64). I started with this one because glibc 2.28 was used in Ubuntu 18.04, which we know the binary was compiled from through looking at the strings in the binary.
 
@@ -453,7 +455,7 @@ io.interactive()
 
 The GOT showing strlen was replaced with execve.
 
-![[got.png]]
+![got](/assets/holygrail/got.png)
 
 Adding to the payload to calls `strlen("/bin/bash",0,0)`. The `17*4` was calcluated by counting the number of bytes written to bss until the "/bin/bash" string. We also do not care to cleanly return after the execve so I leave "AAAA"
 ```python
@@ -571,7 +573,7 @@ io.send(p32(execve))
 io.interactive()
 ```
 
-![[shell.png]]
+![shell](/assets/holygrail/shell.png)
 
 We can see there is a hint file as well containing:
 ```
@@ -734,4 +736,4 @@ for x in range(5):
 
 And the flag: `flag{Y0u_f1g4t_w311_sir_knig4t_7461834}`
 
-![[flag.png]]
+![flag](/assets/holygrail/flag.png)
