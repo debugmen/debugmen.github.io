@@ -21,7 +21,7 @@ The goals of the challenge are
 
 # Extracting the binary
 The following code will read the beginning message and then read the binary bytes and them to a file.
-```python
+```py
 from pwn import *
 
 io = remote("ctf.battelle.org", 30042)
@@ -100,7 +100,7 @@ We can look at the parameters passed to all the references to where `read` is ca
 
 We look to see if the destination buffer of the `read` call is on the stack and if the `nbytes` of the read is larger than the stack frame size starting where the stack variable is.
 
-```python
+```py
 from pwn import *
 from binaryninja import BinaryViewType, RegisterValueType
 
@@ -175,7 +175,7 @@ When we do want to match, I grab the parameter of the strncmp call and dereferen
 
 Because we are recursively generating the inputs starting from the vuln function to main, we have to reverse the inputs we get to have the correct order.
 
-```python
+```py
 from pwn import *
 from binaryninja import BinaryViewType, RegisterValueType, MediumLevelILOperation
 
@@ -233,7 +233,7 @@ And we can confirm these are the correct inputs by running the binary and sendin
 # Exploit the bug
 To debug our exploit, I added the following code after generating the input array.
 
-```python
+```py
 context.binary = elf = ELF("./binary")
 
 io = elf.process()
@@ -257,7 +257,7 @@ Running this, we can see the segfault with our `b"BBBB"`.
 
 I didn't know how long my ropchain would be so the first thing I did was pivot and call read with much more bytes. The updated payload is:
 
-```python
+```py
 rop = ROP(elf)
 leave_ret = rop.find_gadget(['leave','ret'])[0]
 read = elf.plt['read']
@@ -322,7 +322,7 @@ Unfortunetly, there were no gadgets that let me control `edx`, however, a side e
 Now, to use that `add eax...` gadget, I need to find it automatically every time. I could call ropgadget and parse the output but I used binaryninja to search for the bytes that correspond to `add eax, dword ptr [edx]`. 
 
 With the following payload, we get `eax` to point to the `write` function.
-```python 
+```py
 rop = ROP(elf)
 leave_ret = rop.find_gadget(['leave','ret'])[0]
 read = elf.plt['read']
@@ -356,7 +356,7 @@ Also lucky that there is a `jmp eax` gadget that we can use to call write.
 
 The following code calls `write(1,read_GOT,4)`, to leak read.
 
-```python
+```py
 rop = ROP(elf)
 leave_ret = rop.find_gadget(['leave','ret'])[0]
 read = elf.plt['read']
@@ -467,7 +467,7 @@ payload2 += b"/bin/bash\x00"
 ```
 
 The following code pops a shell on remote.
-```python
+```py
 from pwn import *
 from binaryninja import BinaryViewType, RegisterValueType, MediumLevelILOperation
 
@@ -615,7 +615,7 @@ Repeating is easy, just put everything in a loop and add `context.log_level = "d
 This must be needed because it correctly buffers the data.
 
 Final code:
-```python
+```py
 from pwn import *
 from binaryninja import BinaryViewType, RegisterValueType, MediumLevelILOperation
 
