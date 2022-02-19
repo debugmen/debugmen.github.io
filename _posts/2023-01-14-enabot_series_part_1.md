@@ -17,6 +17,7 @@ ctf-category: PWN
     - [Dumping the flash](#dumping-the-flash)
   - [Analyzing the firmware](#analyzing-the-firmware)
   - [Getting A Shell](#getting-a-shell)
+  - [Part 1 Conclusion](#part-1-conclusion)
 
 ## About Enabot
 I was looking for IoT devices to hack and I wanted something that would be a nightmare once compromised. I came across "Playdate" a dog toy ball that can use your voice and camera to play with your pets. When I tried to get one they hadn't come out yet, so I figured there was some cheap chinese knock-off that I could get which would do the same thing. A few minutes later I came across the Enabot SE. And what do you know there was a coupon for 40% off on amazon, I'll take two. This thing would be a nightmare to have rolling around my apartment. It has a microphone, speaker, camera, and can move around on its own.
@@ -58,6 +59,8 @@ The firmware can also be obtained by dumping the flash. This can be done by remo
 
 The SPI flash is the 8 pin chip in the top right corner.
 
+I tried using my minicom without removing the chip, but as usual, 
+it slightly powers the rest of the board, so it can't be properly dumped. 
 I used a heat gun with some tweezers to first heat up and lift one side, then I did the same with the other and it came off.
 
 ![Removed](/assets/enabot_part1/removed.jpg)
@@ -967,7 +970,9 @@ PID   USER     TIME   COMMAND
 
 We now have a working shell and can access the device. We see that the main process running is the EBO_FW_C file which now confirms this is the main file running the system.
 
-We now have the basics for IoT hacking. Now we just have to dive into the analysis and find a vulnerbaility in the firmware.
+## Part 1 Conclusion
+
+We now have the tools and resources for hacking this thing. We were able to get two firmware versions by intercepting an update, and dumping the chip. We also got a rootshell on the device. We can now dive into the firmware and see how it actually interacts with the device through our shell. Next post will cover this as we dive into the EBO_FW_C file analysis and try look for vulnerabilities.
 
 <br>
 
