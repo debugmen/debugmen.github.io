@@ -967,6 +967,8 @@ PID   USER     TIME   COMMAND
 
 </details><br>
 
+Here's me messing around a bit in the shell. We can see the sys files that we can't see in the dumped firmware since they contain information about the system and it's hardware components during runtime
+![rootshell](/assets/enabot_part1/rootshell.png)
 
 We now have a working shell and can access the device. We see that the main process running is the EBO_FW_C file which now confirms this is the main file running the system.
 
