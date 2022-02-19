@@ -8,6 +8,16 @@ ctf-category: PWN
 ---
 # Enabot Hacking: Part 1 -> Teardown and Firmware Extraction
 
+- [Enabot Hacking: Part 1 -> Teardown and Firmware Extraction](#enabot-hacking-part-1---teardown-and-firmware-extraction)
+  - [About Enabot](#about-enabot)
+  - [Project Goal](#project-goal)
+  - [Teardown](#teardown)
+  - [Getting the Firmware](#getting-the-firmware)
+    - [Intercepting the firmware](#intercepting-the-firmware)
+    - [Dumping the flash](#dumping-the-flash)
+  - [Analyzing the firmware](#analyzing-the-firmware)
+  - [Getting A Shell](#getting-a-shell)
+
 ## About Enabot
 I was looking for IoT devices to hack and I wanted something that would be a nightmare once compromised. I came across "Playdate" a dog toy ball that can use your voice and camera to play with your pets. When I tried to get one they hadn't come out yet, so I figured there was some cheap chinese knock-off that I could get which would do the same thing. A few minutes later I came across the Enabot SE. And what do you know there was a coupon for 40% off on amazon, I'll take two. This thing would be a nightmare to have rolling around my apartment. It has a microphone, speaker, camera, and can move around on its own.
 
@@ -15,11 +25,19 @@ I was looking for IoT devices to hack and I wanted something that would be a nig
 My goal is to get remote code execution through some parsing or network bug so that I can hack this thing without touching it. I also want to make a custom firmware that would give me complete control after someone boots it up and do fun stuff. This series will cover the entire process from start to finish about what I did, my thought process behind it, and why it worked.
 
 ## Teardown
-Filler
+Tearing down this was great. We didn't have to snap any plastic, 
+and all the parts were easily detachable.
+I could easily rebuild the device if needed.
 
-## Intercepting the firmware
+Here is the full teardown with all the pieces, and chips written down
+![Teardown_full](/assets/enabot_part1/full_td.jpg)
+
+## Getting the Firmware
+
 I'm going to obtain the firmware in 2 different ways, the first way by doing a firmware update and intercepting the file it downloads. I did this by connecting the device to a hotspot off of my computer. That way I can open wireshark and see the packets that first come to my computer, and then go out to the device.
+The second way is by dumping the SPI flash on the board of the device. I'll do this before the update so we have the original firmware.
 
+### Intercepting the firmware
 First I hit capture packets (making sure wireshark was looking at my hotspot network) and then I hit update firmware in the ebo app immediately after. The packets started rolling in. 
 
 Once the update was complete I hit stop capture and did a string search for a .com to get the url it grabbed them from figuring the file would start around there. It found a few which were just a generic server they have hosted for the firmware updates. Near one of the packets with a URL I came across across a packet that specified the filename: *1640594394-ebo-se-ipc20211223.tar*. This let me know that the file being downloaded was a tar file, and I knew I could just look for the packet with tar headers. That turned out to be the next packet. 
@@ -34,8 +52,32 @@ It has some http headers at the beginning, but I know binwalk will still be able
 
 I run binwalk with -evM so that it extracts it recursively, and prints the outputs verbosely. We now have the extracted firmware through an update interception.
 
-## Dumping the flash
-The firmware can also be obtained by dumping the flash. This can be done by removing the spi flash chip from the board, and then reading it with a spi flash reader. I use a minicom pro with the custom softare mainted on gitlab.
+### Dumping the flash
+The firmware can also be obtained by dumping the flash. This can be done by removing the spi flash chip from the board, and then reading it with a spi flash reader. 
+![Front](/assets/enabot_part1/board_top.jpg)
+
+The SPI flash is the 8 pin chip in the top right corner.
+
+I used a heat gun with some tweezers to first heat up and lift one side, then I did the same with the other and it came off.
+
+![Removed](/assets/enabot_part1/removed.jpg)
+
+Now here's what I have
+
+![Read_chip](/assets/enabot_part1/read_chip.jpg)
+
+
+I use a minicom pro with the [custom software](https://gitlab.com/DavidGriffith/minipro) maintained on gitlab.
+
+Putting the chip in the socket reader and running the follow command dumped the firmware
+
+    ./minipro -p "XM25QH128A@SOIC8" -r dumped_firmware.bin
+
+
+If you reverse the 5v and ground of the chip, the minipro will warn you, so don't worry about shorting the chip.
+
+And that's it, we have the firmware. Later we'll create a tool to unpack and repack the firmware so that we can easily flash new custom firmwares onto the chip 
+
 
 
 ## Analyzing the firmware
@@ -833,18 +875,99 @@ I then wanted to check how long a bruteforce would take. I did a little research
 4. Crack.sh would crack a descrypt hash for $100
 
 
-I went with option 4. The amount of time and/or energy needed (literal energy from graphics cards and CPU's) would be way over $100, and my friends agreed to split the cost with me if they could help hack the Ebo. This was just a no brainer. Four days later, I have the password.
+I went with option 4. The amount of time and/or energy needed (literal energy from graphics cards and CPU's) would be way over $100, and my friends agreed to split the cost with me if they could help hack the Ebo. This was just a no brainer. A few day later, I have the password.
 
-* filler
+    fz@2019*
+
+Note that getting this password really wasn't necessary as we could've just modified the passwd file, or added a backdoor to the firmware, and then reflashed it. It's just cool knowing we know the root password on the most up to date firmware.
+
+
+Let's connect through SSH and see what processes are running. 
+
+    ssh root@<ip>
+
+<details>
+<summary> Running Processes </summary>
+
+```
+~ # ps
+PID   USER     TIME   COMMAND
+    1 root       0:00 {linuxrc} init
+    2 root       0:00 [kthreadd]
+    3 root       0:03 [ksoftirqd/0]
+    5 root       0:00 [kworker/0:0H]
+    7 root       0:04 [rcu_preempt]
+    8 root       0:00 [rcu_sched]
+    9 root       0:00 [rcu_bh]
+   10 root       0:00 [lru-add-drain]
+   11 root       0:00 [watchdog/0]
+   12 root       0:00 [kdevtmpfs]
+   13 root       0:00 [netns]
+  134 root       0:00 [oom_reaper]
+  135 root       0:00 [writeback]
+  137 root       0:00 [kcompactd0]
+  138 root       0:00 [crypto]
+  139 root       0:00 [bioset]
+  141 root       0:00 [kblockd]
+  161 root       0:00 [cfg80211]
+  163 root       0:00 [watchdogd]
+  186 root       0:00 [kswapd0]
+  279 root       0:02 [urdma_tx_thread]
+  298 root       0:00 [bioset]
+  303 root       0:00 [bioset]
+  308 root       0:00 [bioset]
+  313 root       0:00 [bioset]
+  318 root       0:00 [bioset]
+  323 root       0:00 [bioset]
+  328 root       0:00 [bioset]
+  339 root       0:00 [monitor_temp]
+  345 root       0:48 [spi0]
+  347 root       0:00 [spi1]
+  359 root       0:00 [kworker/0:1H]
+  382 root       0:00 [jffs2_gcd_mtd5]
+  384 root       0:00 [jffs2_gcd_mtd6]
+  406 root       0:00 [rpciod]
+  407 root       0:00 [xprtiod]
+  413 root       0:00 [nfsiod]
+  443 root       0:00 [bioset]
+  444 root       0:00 [mmcqd/0]
+  465 root       0:00 [SensorIfThreadW]
+  474 root       0:05 [IspDriverThread]
+  544 root      18:49 /usr/userfs/bin//FW_EBO_C
+  545 root       0:00 {linuxrc} init
+  560 root       0:00 /usr/sbin/dropbear
+  580 root       0:22 [ai0_P0_MAIN]
+  593 root       0:02 [RTW_CMD_THREAD]
+  615 root       0:00 wpa_supplicant -B -Dnl80211 -iwlan0 -c/configs/wpa_supplicant.conf
+  622 root       0:03 [vif0_P0_MAIN]
+  623 root       0:00 [vif1_P0_MAIN]
+  624 root       0:14 [vpe0_P0_MAIN]
+  625 root       0:00 [vpe0_P1_MAIN]
+  626 root       0:00 [vpe0_P2_MAIN]
+  627 root       0:00 [VEP_DumpTaskThr]
+  637 root       0:00 [divp0_P0_MAIN]
+  639 root       0:15 [venc0_P0_MAIN]
+  640 root       0:00 [venc1_P0_MAIN]
+  704 root       0:01 /usr/sbin/dropbear
+  706 root       0:00 -sh
+  760 root       0:10 [kworker/u2:2]
+  768 root       0:00 sh
+  769 root       0:00 sh
+  800 root       0:04 [kworker/0:0]
+  804 root       0:07 [kworker/u2:0]
+  805 root       0:04 [kworker/0:1]
+  813 root       0:04 [kworker/0:2]
+  825 root       0:01 [kworker/u2:1]
+  830 root       0:00 ps
+~ # 
+```
+
+</details><br>
+
+
+We now have a working shell and can access the device. We see that the main process running is the EBO_FW_C file which now confirms this is the main file running the system.
+
+We now have the basics for IoT hacking. Now we just have to dive into the analysis and find a vulnerbaility in the firmware.
 
 <br>
-
-
-## Basic Firmware Analysis
-
-Let's move on to looking at the actual firmware which is almost guarenteed to be the ```FW_EBO_C``` file because of the FW in the name. 
-```
-FW_EBO_C: ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-uClibc.so.0, stripped
-```
-Unfortunately it's stripped. I'll analyze it in binary ninja and ghidra and see what it finds.
 
