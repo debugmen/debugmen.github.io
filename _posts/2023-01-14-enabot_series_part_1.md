@@ -5,7 +5,7 @@ title:  "Enabot Hacking: Part 1"
 date:   2022-02-18 1:01:37 -0500
 categories: Hardware Series
 ctf-category: PWN
-tags: etch hardware IoT
+tags: etch hardware IoT re
 ---
 # Enabot Hacking: Part 1 -> Teardown and Firmware Extraction
 
