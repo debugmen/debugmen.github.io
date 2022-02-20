@@ -22,8 +22,6 @@ title: Debugmen
 email: debugmen.ctf.team@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
   Welcome to the Debugmen blog. We use this site to post tools, security findings, CTF writeups and anything else we find worthy of release to the public.
-baseurl: "" # the subpath of your site, e.g. /blog
-url: "" # the base hostname & protocol for your site, e.g. http://example.com
 twitter_username: None
 github_username:  debugmen
 
