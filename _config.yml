@@ -27,7 +27,7 @@ twitter_username: None
 github_username:  debugmen
 
 
-baseurl: "https://debugmen.dev"
+url: "https://debugmen.dev"
 # Build settings
 #theme: jekyll-dash
 plugins:
