@@ -5,6 +5,7 @@ title: "UTCTF: Tar Inspector"
 date: 2021-03-14 15:24:00 -0500
 categories: CTF-writeup
 ctf-category: WEB
+tags: etch web
 ---
 
 
