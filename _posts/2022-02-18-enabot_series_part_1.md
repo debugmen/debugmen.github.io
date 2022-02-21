@@ -3,7 +3,7 @@ layout: post
 author: Etch
 title:  "Enabot Hacking: Part 1"
 date:   2022-02-18 1:01:37 -0500
-categories: Hardware Series
+categories: Hardware-series
 ctf-category: PWN
 tags: etch hardware IoT re
 ---
