@@ -1,3 +1,4 @@
+
 # Welcome to Jekyll!
 #
 # This config file is meant for settings that affect your whole blog, values
@@ -22,19 +23,32 @@ title: Debugmen
 email: debugmen.ctf.team@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
   Welcome to the Debugmen blog. We use this site to post tools, security findings, CTF writeups and anything else we find worthy of release to the public.
+baseurl: "" # the subpath of your site, e.g. /blog
+url: "" # the base hostname & protocol for your site, e.g. http://example.com
 twitter_username: None
 github_username:  debugmen
 
-paginate: 8
+# Build settings
+#theme: jekyll-dash
+plugins:
+  - jekyll-feed
+  - jekyll-paginate
+  - liquid-md5
+  - jekyll-seo-tag
+paginate: 10
 paginate_path: "/blog/page:num/"
 
+members:
+  - "Vergil"
+  - "Etch"
+  - "playoff-rondo"
+  - "Veryyes"
+  - "STKFLT"
 
 # jekyll-tagging (optional)
 tag_permalink_style: pretty
 tag_page_layout: tag_page
 tag_page_dir: tag
-
-
 dash:
   date_format: "%b %-d, %Y"
 
@@ -45,32 +59,9 @@ dash:
     - url: https://github.com/debugmen
       icon: github-square
       color: green
-
   show_author: true
   avatar_source: github
   github_username: debugmen
-
-# Build settings
-theme: jekyll-dash
-
-plugins:
-  - jekyll-feed
-  - jekyll-paginate
-  - liquid-md5
-  - jekyll-seo-tag
-  - jekyll/tagging
-
-
-members:
-  - "Vergil"
-  - "Etch"
-  - "playoff-rondo"
-  - "Veryyes"
-  - "STKFLT"
-
-
-
-
 
 # Exclude from processing.
 # The following items will not be processed, by default.
