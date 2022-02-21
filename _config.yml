@@ -26,6 +26,8 @@ description: >- # this means to ignore newlines until "baseurl:"
 twitter_username: None
 github_username:  debugmen
 
+
+baseurl: "https://debugmen.dev"
 # Build settings
 #theme: jekyll-dash
 plugins:
