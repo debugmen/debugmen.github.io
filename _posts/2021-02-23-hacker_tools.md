@@ -5,6 +5,7 @@ title:  "Tenable CTF: Hacking Toolz"
 date:   2021-02-23 18:32:53 -0500
 categories: CTF-writeup
 ctf-category: WEB
+tags: etch web
 ---
 
 # Hacking Toolz (web):

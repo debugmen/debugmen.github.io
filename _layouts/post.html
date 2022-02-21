@@ -6,13 +6,12 @@ layout: default
 {% endunless %}
 <div class="post">
   <h1 class="post-title">{{ page.title }}</h1>
-  {% if site.plugins contains "jekyll/tagging" %}
-  <div class="post-tags">
-      {% for tag in page.tags %}
-      <a class="tag" href="/tag/{{ tag }}/">{{ tag }}</a>
-      {% endfor %}
-  </div>
-  {% endif %}
+  <span>[
+    {% for tag in page.tags %}
+      {% capture tag_name %}{{ tag }}{% endcapture %}
+      <a href="/tag/{{ tag_name }}"><code class="highligher-rouge"><nobr>{{ tag_name }}</nobr></code>&nbsp;</a>
+    {% endfor %}
+  ]</span>
   <div class="post-date">Published on {{ page.date | date_to_string }}</div>
   {% if page.description != null %}
   <div class="post-description">{{ page.description }}</div>
@@ -47,3 +46,21 @@ layout: default
 </div>
 {% endif %}
 {% include tagcloud.html %}
+
+{% assign animation_speed = site.dash.animation_speed | default: 50 %}
+<script>
+  let i = 0;
+  const text = '{{ page.description }}';
+  const speed = parseInt('{{ animation_speed }}');
+  
+  function typeWriter() {
+    if (i < text.length) {
+      document.getElementById('animated-post-description').innerHTML += text.charAt(i);
+      i++;
+      setTimeout(typeWriter, speed);
+    }
+  }
+
+  document.getElementById('animated-post-description').style.display = 'initial';
+  typeWriter();
+</script>
