@@ -1,8 +1,14 @@
 <h2>All tags</h2>
-<div class="post-tags">
-  {% for post in site.posts %}
-    {% for tag in post.tags %}
-    <a class="tag" href="/tag/{{ tag }}">{{ tag }}</a>
-    {% endfor %}
+{% capture temptags %}
+  {% for tag in site.tags %}
+    {{ tag[1].size | plus: 1000 }}#{{ tag[0] }}#{{ tag[1].size }}
   {% endfor %}
+{% endcapture %}
+{% assign sortedtemptags = temptags | split:' ' | sort | reverse %}
+<div class="post-tags">
+{% for temptag in sortedtemptags %}
+  {% assign tagitems = temptag | split: '#' %}
+  {% capture tagname %}{{ tagitems[1] }}{% endcapture %}
+    <a class="tag" href="/tag/{{ tagname }}">{{ tagname }}</a>
+{% endfor %}
 </div>
