@@ -18,16 +18,17 @@ tags: etch hardware IoT re
     - [Dumping the flash](#dumping-the-flash)
   - [Analyzing the firmware](#analyzing-the-firmware)
   - [Getting A Shell](#getting-a-shell)
+  - [Debugging Capabilities](#debugging-capabilities)
   - [Part 1 Conclusion](#part-1-conclusion)
 
 ## About Enabot
 I was looking for IoT devices to hack and I wanted something that would be a nightmare once compromised. I came across "Playdate" a dog toy ball that can use your voice and camera to play with your pets. When I tried to get one they hadn't come out yet, so I figured there was some cheap chinese knock-off that I could get which would do the same thing. A few minutes later I came across the Enabot SE. And what do you know there was a coupon for 40% off on amazon, I'll take two. This thing would be a nightmare to have rolling around my apartment. It has a microphone, speaker, camera, and can move around on its own.
 
 ## Project Goal
-My goal is to get remote code execution through some parsing or network bug so that I can hack this thing without touching it. I also want to make a custom firmware that would give me complete control after someone boots it up and do fun stuff. This series will cover the entire process from start to finish about what I did, my thought process behind it, and why it worked.
+My goal is to get remote code execution through some parsing or network bug so that I can hack this thing without touching it. I also want to make a custom firmware that would give me complete control after it boots up. This series will cover the entire process from start to finish about what I did, my thought process behind it, and why it worked.
 
 ## Teardown
-Tearing down this was great. We didn't have to snap any plastic, 
+Tearing down this was great. I didn't have to snap any plastic, 
 and all the parts were easily detachable.
 I could easily rebuild the device if needed.
 
@@ -35,15 +36,19 @@ Here is the full teardown with all the pieces, and chips written down
 
 ![Teardown_full](/assets/enabot_part1/full_td.jpg)
 
+If we do a google search for the processor we can find the manual. The processor manual is the bible of this device. Always try to find it and always go to it when something goes wrong you don't understand. This will come in handy later on.
+
 ## Getting the Firmware
 
-I'm going to obtain the firmware in 2 different ways, the first way by doing a firmware update and intercepting the file it downloads. I did this by connecting the device to a hotspot off of my computer. That way I can open wireshark and see the packets that first come to my computer, and then go out to the device.
+I'm going to obtain the firmware in 2 different ways. 
+The first way is by doing a firmware update and intercepting the file it downloads. 
 The second way is by dumping the SPI flash on the board of the device. I'll do this before the update so we have the original firmware.
 
 ### Intercepting the firmware
-First I hit capture packets (making sure wireshark was looking at my hotspot network) and then I hit update firmware in the ebo app immediately after. The packets started rolling in. 
+I was able to intercept the firmware update packets by connecting the device to a hotspot off of my computer. That way I can open wireshark and see the packets that first come to my computer, and then go out to the device.
+First I hit capture packets (making sure wireshark was looking at my hotspot network) and then I hit update firmware in the ebo app immediately after. TThen the packets started rolling in. 
 
-Once the update was complete I hit stop capture and did a string search for a .com to get the url it grabbed them from figuring the file would start around there. It found a few which were just a generic server they have hosted for the firmware updates. Near one of the packets with a URL I came across across a packet that specified the filename: *1640594394-ebo-se-ipc20211223.tar*. This let me know that the file being downloaded was a tar file, and I knew I could just look for the packet with tar headers. That turned out to be the next packet. 
+Once the update was complete I hit stop capture and did a string search for a .com to get the url it grabbed the update from. It found a few which were just a generic server they have hosted for the updates. Near one of the packets with a URL I came across across a packet that specified the filename: *1640594394-ebo-se-ipc20211223.tar*. This let me know that the file being downloaded was a tar file, and I knew I could just look for the packet with tar headers. That turned out to be the next packet. 
 
 ![tar_headers](/assets/enabot_part1/tar_headers.png)
 
@@ -53,7 +58,6 @@ I right clicked the packet, hit follow->tcp_stream, changed the data to a raw fo
 
 It has some http headers at the beginning, but I know binwalk will still be able to extract it easily, so I just leave them.
 
-I run binwalk with -evM so that it extracts it recursively, and prints the outputs verbosely. We now have the extracted firmware through an update interception.
 
 ### Dumping the flash
 The firmware can also be obtained by dumping the flash. This can be done by removing the spi flash chip from the board, and then reading it with a spi flash reader. 
@@ -76,7 +80,7 @@ Now here's what I have
 
 I use a minicom pro with the [custom software](https://gitlab.com/DavidGriffith/minipro) maintained on gitlab.
 
-Putting the chip in the socket reader and running the follow command dumped the firmware
+Putting the chip in the socket reader of my minicom and running the follow command dumped the firmware
 
     ./minipro -p "XM25QH128A@SOIC8" -r dumped_firmware.bin
 
@@ -88,6 +92,11 @@ And that's it, we have the firmware. Later we'll create a tool to unpack and rep
 
 
 ## Analyzing the firmware
+I'll run binwalk with -evM so that it extracts it recursively, and prints the outputs verbosely. We now have the extracted firmware through an update interception.
+
+```
+binwalk -evM intercepted_firmware.bin
+```
 
 <details>
 <summary>Binwalk Output</summary>
@@ -228,7 +237,10 @@ DECIMAL       HEXADECIMAL     DESCRIPTION
 
 <br>
 Then I'll run tree to see easily see all the files in the firmware
-<br><br>
+
+```
+tree _intercepted_firmware
+```
 <details>
 <summary>Tree Output</summary><br>
 <pre>
@@ -839,12 +851,12 @@ Then I'll run tree to see easily see all the files in the firmware
 
 There's all the files and directories. Some that are notable are the busybox telnet symlink, boot.bin, kernel, passwd, FW_EBO_C, and of course the sound directory cause I think it be funny to make this thing say stupid crap.
 
-One important thing it's missing is a netcat symlink in the busybox. When I make my own firmware, I'll definitely plan on putting my own busybox on the device so I can setup a netcat reverse shell.
+One thing that would be nice to have that it's missing is a netcat symlink in the busybox. When I make my own firmware, I'll definitely plan on putting my own busybox on the device so I can setup a netcat reverse shell or bind shell.
 
 <br>
 
 ## Getting A Shell
-I'll start off with the passwd file. If we can crack the root password in that file, we can get a root shell through telnet or ssh if either of those are enabled.
+We now have all the files that are stored between boots, but now we wanna see what processes and files are created when the device boots up. I'll start off with the etc/passwd file. If we can crack the root password in that file, we can get a root shell through telnet or ssh if either of those are enabled.
 
 The contents are as follows
 
@@ -861,7 +873,7 @@ root:ab8nBoH3mb8.g:0:0::/root:/bin/sh
 ```
 It has a different hash for the root user and was easily cracked with rockyou.txt. The password was ```helpme```. They probably updated the password in the newer firmware update after figuring out it could be cracked in less than a second. 
 
-I then wanted to check how long a bruteforce would take. I did a little research about the hashing algorithm they use, "DES Crypt". Turns out it can only be 8 characters long, so definitely crackable with enough time and good enough hardware. I tried bruteforcing everything up to 7 characters which took about a day, and had no luck. That means the password is 8 characters. My hashrate with a 1060 TI is about 460 Megahashes per second. After doing the math it would take my machine 5 years running nonstop to check every 8 character password. I did some reasearch and found these alternative options for cracking
+I then wanted to check how long a bruteforce would take. I did a little research about the hashing algorithm they use, "DES Crypt". Turns out it can only be 8 characters long, so definitely crackable with enough time and good enough hardware. I tried bruteforcing everything up to 7 characters which took about a day, and had no luck. That means the password is 8 characters. My hashrate with a 1060 TI is about 460 Megahashes per second. After doing the math it would take my machine 5 years running nonstop to check every 8 character password. I searched around the web and found these alternative options for cracking
 
 1. A google collab hashcat session gave me 850 Mh/s
     * [Colabcat](https://github.com/someshkar/colabcat)
@@ -872,7 +884,7 @@ I then wanted to check how long a bruteforce would take. I did a little research
 4. Crack.sh would crack a descrypt hash for $100
 
 
-I went with option 4. The amount of time and/or energy needed (literal energy from graphics cards and CPU's) would be way over $100, and my friends agreed to split the cost with me if they could help hack the Ebo. This was just a no brainer. A few day later, I have the password.
+I went with option 4. The amount of time and/or energy needed (literal energy from graphics cards and CPU's) would be way over $100
 
     fz@2019*
 
@@ -965,11 +977,26 @@ Here's me messing around a bit in the shell. We can see the sys files that we ca
 
 ![rootshell](/assets/enabot_part1/rootshell.png)
 
-We now have a working shell and can access the device. We see that the main process running is the EBO_FW_C file which now confirms this is the main file running the system.
+We now have a working shell and can access the device. We see that the main process running is the EBO_FW_C file which confirms this is the main file running the system.
+
+
+## Debugging Capabilities
+The one thing that would be nice to have is debugging capabilites. If you look closesly on the back of the board we see there are numerous circular gold pads with labels. These are pads meant for hooking up wires to for external capabilites.
+
+![back](/assets/enabot_part1/board_bottom.jpg)
+
+Some of them are rx and tx which means they communicate with [serial](https://circuitdigest.com/tutorial/serial-communication-protocols). There is one close to the middle with SWD/SWC pads so it communicates over serial wire debug with the [JTAG protocol on top](https://embeddedinventor.com/swd-vs-jtag-differences-explained). I'd guess that's the one for the main processor, but I'd need to do [continuity tests](https://www.youtube.com/watch?v=uyUb0pNZZSg) on the pins/pads to confirm it. The good thing is we know exactly what pins on the processor are what since we have the manual.
+
+![manual](/assets/enabot_part1/manual.png)
+
+We can look at that image and the pin tables they have in the manual to figure out what pins would let us hook up a debugger. We can then do a continuity test to see what pads they go to and hook up wires, which we can then hook up to a hardware debugger.
+This can sometimes be a pain, and I don't need it yet, so I'm not gonna dive any deeper into it. I may end up needing to do it later in this series, but for now, I'm gonna leave it at that.
 
 ## Part 1 Conclusion
 
-We now have the tools and resources for hacking this thing. We were able to get two firmware versions by intercepting an update, and dumping the chip. We also got a rootshell on the device. We can now dive into the firmware and see how it actually interacts with the device through our shell. Next post will cover this as we dive into the EBO_FW_C file analysis and try look for vulnerabilities.
+We now have the tools and resources for hacking this thing. We were able to get two firmware versions by intercepting an update, and dumping the chip. We also got a rootshell on the device. We can now dive into the firmware and see how it actually interacts with the device through our shell. If we really need, we could also get some hardware debugging. Next post will cover this as we dive into the EBO_FW_C file analysis and try look for vulnerabilities.
+
+
 
 <br>
 
