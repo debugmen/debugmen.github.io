@@ -5,7 +5,7 @@ title:  "Enabot Hacking: Part 2"
 date:   2022-02-18 1:01:37 -0500
 categories: Hardware-series
 ctf-category: PWN
-tags: etch hardware IoT re enabot
+tags: etch  lain3d hardware IoT re enabot
 ---
 # Enabot Hacking: Part 1 -> Vulnerability Research
 - [Enabot Hacking: Part 1 -> Vulnerability Research](#enabot-hacking-part-1---vulnerability-research)
@@ -13,13 +13,10 @@ tags: etch hardware IoT re enabot
 - [Packet Analysis](#packet-analysis)
   - [Software debugging](#software-debugging)
   - [Bypassing the watchdog](#bypassing-the-watchdog)
-- [Probably don't wanna keep all of the gdb stuff above, but some of it for the process](#probably-dont-wanna-keep-all-of-the-gdb-stuff-above-but-some-of-it-for-the-process)
-- [Packet Reversing](#packet-reversing)
-  - [Ebo Message Header](#ebo-message-header)
-  - [Ebo Control Packets](#ebo-control-packets)
-  - [More of the Same](#more-of-the-same)
-- [Motor Packets](#motor-packets)
 - [Video Packets](#video-packets)
+- [Audio Packets](#audio-packets)
+- [Mic Packets](#mic-packets)
+- [](#)
 
 ## Introduction
 Last post I covered the teardown and firmware extraction of the enabot. In this post I plan to begin the vulnerability research where I look for ways to break in. Hopefully this post ends with me beginning to develop an exploit.
@@ -45,15 +42,11 @@ https://www.ul.com/resources/privacy-risk-iot-cctv-camera-security
 
 After reading through them it turns out the function is XORing the packet with the charlie string, and then scrambling it, although it doesn't appear to be scrambled in the packet I just saw. I tried the same thing they mention in the 2nd post where they found the .so file and used the function in it to descramble it, but the packet still just looked like random garbage.
 
-<details open>
-<summary>Code that uses the descramble function</summary>
 
-```C
+```
 #include <stdio.h>
 #include <stdlib.h>
 #include <dlfcn.h>
-
-
 
 int main(){
     unsigned char input[115] = {
@@ -91,9 +84,8 @@ int main(){
     free(output_ptr);
 
 }
-```
 
-</details>
+```
 
 ## Software debugging
 
@@ -150,7 +142,7 @@ Setting the registers every time I wanted to debug was tedious, so wrote a gdb s
 
 <details>
 <summary>Python gdb script</summary>
-
+<pre>
 ```python
 import os
 import signal
@@ -233,7 +225,7 @@ def main():
 
 if __name__ == '__main__':
     main()
-```
+</pre>
 
 </details>
 <br>
@@ -242,7 +234,7 @@ This is used in conjunction with a bash script because sending arguments to a gd
 <details>
 <summary>Bash script for debugging</summary>
 
-```bash
+<pre>
 #!/usr/bin/env bash
 doc="
 ./debug.sh gdb_debug_script.py 'target_ip' 'host_ip' 'ssh_password'
@@ -263,8 +255,11 @@ done
 echo "Calling gdb"
 echo "gdb $cli -x '$py FW_EBO_C'"
 eval gdb-multiarch  $cli -x "$py " "FW_EBO_C"
-```
+
+</pre>
+
 </details>
+
 <br>
 
 Now if I run the bash script, it'll do the following
@@ -281,11 +276,11 @@ After doing this it works! Mostly... The device will still restart after about 5
 
 Back to the packet analysis. So after hitting the breakpoint at the beginning of the charlie scramble function, I dumped out the bytes of the input packet to be scrambled, set a breakpoint at the end of the function, and dumped the bytes of the scrambled output bytes when it got there. Then I continued and watched the packet appear in wireshark after setting the filter to be only udp packets.
 
->Before scramble
+Before scramble
 ![before_scramble](/assets/enabot_part2/scramble_start.png)
->After scramble
+After scramble
 ![after_scramble](/assets/enabot_part2/scramble_after.png)
->Wireshark scramble capture
+Wireshark scramble capture
 ![wireshark_scramble](/assets/enabot_part2/wireshark_capture_scramble.png)
 
 If you compare the bytes at the bottom of the after scramble image and the wireshark image, you'll see that they match. This means we can successfully capture the packet before it gets encrypted. Now the only issue is the decrypted bytes still don't mean anything. I was hoping they'd be in some simple format like JSON or something, but they're completely random bytes. Maybe this is only for raw video data and if I capture a packet of the device moving forward, it'll be in a better format.
@@ -306,7 +301,9 @@ Every packet going to or from the device started with a message header.
 ## Ebo Message Header
 
 ![MsgHdr](/assets/enabot_part2/ebo_msg_hdr.png)
-![PacketType](/assets/enabot_part2/ebo_packet_type.png)
+
+<img src="/assets/enabot_part2/ebo_packet_type.png" alt="Ebo Packet Type" style="height: 100px; width:320px;"/>
+
 
 1. The first two bytes are always `0x0402`
 2. The second two bytes determine whether it's a connection, control , or status packet. Control packets allow the device it's communicating with to actually control the state of the device so control packets are sent from the host device. Connection packets are for devices connecting to the ebo. Status packets are sent from the ebo to connected devices to update the status of itself or send data.
@@ -333,7 +330,7 @@ Almost all packets are control packets whether sent from the ebo or from the hos
 
 ## More of the Same
 
-That really covers the basics of how these packets are layed out. Every path taken will just have more of the same with random fixed values, branch values, sequence numbers, etc. Now that there is a basic understanding of what these packets are doing, it'll be easier to explain the packets we actually care about
+That really covers the basics of how these packets are layed out. Every path taken will just have more of the same with random fixed values, branch values, sequence numbers, etc. Now that there is a basic understanding of what these packets are doing, it'll be easier to explain the packets we actually care about. First we'll talk about the tooling we developed so that it can be referenced and understood as the packets below are explained. Keep in mind we developed these tools as we went.
 # Motor Packets
 
 Below are two motor packet which will be referenced in this section for comparison
@@ -343,18 +340,22 @@ Below are two motor packet which will be referenced in this section for comparis
 
 ![Motor2](/assets/enabot_part2/motor2.png)
 
-After the explainations above, some things should stand out like the sequence numbers increasing, the fixed values, and the token/handshake values. But other than that, how do we know this is a motor packet? The most telling thing is that it's length 115 (we can see that in wireshark, we don't expect you to count them). We setup wireshark, and started moving the ebo. When we did that we noticed packets of length 115 came through. After staring at them long enough and pressing enough buttons, we could tell that the value `0xbeca` was somehow controlling the branch of what buttons we pressed. And then there could be ANOTHER branch after that depending on what exactly was pressed. Below explains better what that means.
+Some things mentioned in the packet section above should stand out like the sequence numbers increasing, the fixed values, and the token/handshake values. But other than that, how do we know this is a motor packet? The most telling thing is that it's length 115 (we can see that in wireshark, we don't expect you to count them). We setup wireshark, and started moving the ebo. When we did that we noticed packets of length 115 came through. When we stopped moving the ebo, they stopped appearing. 
+
+## Button Packet Branches
+
+After staring at packets long enough and pressing enough buttons, we could tell that the value `0xbeca` was somehow controlling the branch of what buttons we pressed because the `0xca` byte would change depending on what button. THEN we noticed that some of the buttons would have ANOTHER branch value immediately after that. Below is a packet of a pressed button, and we'll go through the decompiled code using the branch values to figure out which button was pressed.
 
 ![TrickA](/assets/enabot_part2/trick_a.png)
 
-At 0x5e we see the value 0xbec8. Now that 0xbe seems to always be constant, but the 0xc8 changes depending on what we press. We can see this in the decompilation of the firmware.
+At 0x5e we see the value `0xbec8`. Now that 0xbe seems to always be constant, but the 0xc8 changes depending on what we press. We can see some of the branches based off that value below in the decompilation of the firmware.
 
 ![ButtonBranch1](/assets/enabot_part2/button_branch1.png)
 
  ```C
  if (mode??? != 0xd7 && mode??? == 0xc8)
  ```
-Show that when that value is 0xc8 we take that branch and we enter the `enterSelfCheckingMode` function. A little bit further down though we see
+Shows that when that value is 0xc8 we take that branch and we enter the `enterSelfCheckingMode` function. A little bit further down though we see
 ```C
 if (mode??? == 0x2d)
 ```
@@ -366,26 +367,49 @@ So let's enter the `enterSelfCheckingMode` function, to then see the branches th
 
 Now we see evern more branch values, and if we compare them to the packet above, the `0x9cb3` branch value will stick out. Remember the value is little endian, so even though it's `0xb39c` in the packet, when the code gets it, it interprets it as `0x9cb3`. If the value `0x9ca8` it would be a `forceEnterLowPowerMode` packet based off of the strings.
 
+So based off the string `MAV_CMD_CONTROL_SKILL_A` we know it was a "skill button". The ebo has various buttons that make it do random stuff like spin, or shake. This string let's us know those buttons are referred to as skills and can be easily identified now.
 
-Now that we understand how we understand the branch values of the packets that involves buttons, it should be easy to just go into the decompilation and see what the motor packets are doing!
+Now that we undestand the branch values of these types of packets, it should be easy to just go into the decompilation and see what the motor packets are doing if we find the right branch where it's value is `0xca`!
 
 ![MotorBinja](/assets/enabot_part2/motor_packet.png)
 
-If only. More often then not we'd go to a function which had our branch and we would have no clue what it was doing, at all... We know it takes this branch because of the `0xca` but the function it goes into seems to just unlock and lock some threads. 
+*If only.* More often then not we'd go to a function which had our branch and we would have no clue what it was doing, at all... We know it takes this branch because of the `0xca` but the function it goes into seems to just unlock and lock some threads. 
 
 This shows how tedious and hard decoding some of these packets was. This one packet alone pretty much had 4 branch values up to this point, and it felt like each branch value had multiple functions which handled them. We'd find a few branch values of one branch in one function and a few others of the same branch in another.
 
-This is why we spent so much time in wireshark. As much fun as reversing code is, sometimes there are just better ways to reverse. This packet was much easier to figure out by just trial and error.
+This is why we spent so much time in wireshark. As much fun as reversing code is, sometimes there are just better ways to do reversing. This packet was much easier to figure out by just trial and error.
 
 In the two motor packets we see 8 bytes in the last full row of bytes. The packets have different values. We figured that since we knew all other parts of the packet, those values must control the direction and speed. So we setup a test.
 
 A capture was started, then the ebo was only moved forward, the capture was stopped, and a new capture was made only moving backwards, etc. until we had all 4 directions.
 
-Then we compared the bytes of the packets and after a little testing it was easy to figure out what was happening.
+Then we compared the bytes of the packets and after a little testing using the ebo_server motor functionality and adjusting values in the motor packets slightly, it was easy to figure out what was happening. Keep your focused on the 0x60 lines in the following packets and try to spot the patterns.
 
-The first four bytes were for forward and backward movement. We still don't know what they first two bytes do, they didn't seem to affect anything, but the next byte controlled the speed where 0 was the slowest, and the byte after that controlled the direction. `0xbf` moved forward and `0x3f` moved backwards. The next 4 bytes followed the same pattern but left and right.
+Forward
 
-This process shows how we did a large majority of reversing the ebo packets.
+
+![forward](/assets/enabot_part2/forward.png)
+
+Backward
+
+
+![backward](/assets/enabot_part2/backward.png)
+
+Left
+
+
+![forward](/assets/enabot_part2/left.png)
+
+Right
+
+
+![right](/assets/enabot_part2/right.png)
+
+
+The first four bytes were for forward and backward movement. We still don't know what they first two bytes do, they didn't seem to affect anything, but the next byte controlled the speed where 0 was the slowest, and the byte after that controlled the direction. `0xbf` moved forward and `0x3f` moved backwards. The next 4 bytes followed the same pattern but left and right. These two separate "motors" can also be used in conjunction to make sharper turns, but we haven't bothered to figure that out yet. For now we can move in all directions and that's all we care to achieve, currently...
+
+This testing process also shows how we did a large majority of reversing the ebo packets. 
+
 
 # Video Packets
 
@@ -396,13 +420,38 @@ Again, way too much effort was put into looking at the code and debugging trying
 
 All the video packets came back to back so it was obvious to tell where the frame started, and then at the end there would still be a long packet, but it wouldnt be length 1122, and that was obviously the end of the frame.
 
-![VideoFrame](/assets/enabot_part2/video_frame.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/video_frame.png" alt="video frame" style="height: 400px; width:350px;"/></p>
 
-The first packet in the sequence always had the value `0x0141` at offset 0x65. After a bunch of googling, some forum post talked about those bytes being the start of an h264 P-Frame. More googling and another forum or something talked about using ffmpeg to convert h264 data to a video. So I tried appending all the bytes that I assumed to be video data and ran it through ffmpeg to see if it would pop out a video file. That didn't work. Then I noticed that some of the sequence of video packets had the header `0x01d7`. Some more googling later, it turned out that was the start of a I-Frame. 
+
+The first packet in the sequence always had the value `0x0141` at offset 0x65 (see image below). After a bunch of googling, some forum post talked about those bytes being the start of an h264 P-Frame. More googling and another forum or something talked about using ffmpeg to convert h264 data to a video. So I tried appending all the bytes that I assumed to be video data and ran it through ffmpeg to see if it would pop out a video file. That didn't work. Then I noticed that some of the sequence of video packets had the header `0x01d7`. Some more googling later, it turned out that was the start of a I-Frame. 
 
 ![PFrame](/assets/enabot_part2/p_frame.png)
 
-From the little bit I read about h264 from doing this reasearch it seems that I-Frames are the initial frame of a video and P-Frames then modify that frame until the next I-Frame is sent. Basically, the video has to start with an I-Frame or it won't have an initial base to modify and thus can't produce a video. So I wrote a parser to parse all the video packets, and append their h264 data together while making sure the first frame of the video was a P-Frame. Apparently the bytes don't need run through ffmpeg and it can just be renamed to .mp4, but I still did it anyways. I could then play video by capturing, decoding, and stripping the bytes from packets.
+From the little bit I read about h264 from doing this research it seems that I-Frames are the initial frame of a video and P-Frames then modify that frame until the next I-Frame is sent. Basically, the video has to start with an I-Frame or it won't have an initial base to modify and thus can't produce a video. So I wrote a parser to parse all the video packets, and appended their h264 data together while making sure the first frame of the video was a P-Frame. I did this based off of the `branch1` values in the packets.
 
-> Put into a player or something ->
-[Extracted Video](/assets/enabot_part2/video.mp4)
+
+<p style="text-align:center;"><img src="/assets/enabot_part2/h264_branches.png" alt="H264 Packet Branches" style="height: 100px; width:320px;"/></p>
+
+
+The `FINAL_FRAME` was the last packet in a frame transmission, so the packet that's length 271 a few images above would have that branch value. The `P_FRAME2` value appeared in packets that were length 1130 but there were some additional fields that made the packet slightly longer. They still had the P-Frame header though, so looking into them further wasn't worth the time.
+
+
+Now all that was left was running the parser and generating the video. Apparently the appended bytes don't need run through ffmpeg and it can just be renamed to .mp4, but it was still done initially anyways. After running it through ffpmeg a real playable video popped out! We could nopw play video sent from the ebo by capturing, decoding, and stripping the bytes from packets.
+
+
+<p style="text-align:center;"><iframe width="420" height="315" src="/assets/enabot_part2/video.mp4" frameborder="0" allowfullscreen></iframe></p>
+
+
+From here, more research went into starting the video packets after connecting to the ebo. If we could figure that out we could connect to the ebo, start the ebo's video streaming, recieve the packets on our server, and then open a video player to watch the video live. The results of this will be shown in the final section.
+
+Now H264 also supports sending audio and I was hoping after I created the video it would have the sound along with it, but it turns out, the audio packets were entirely separate from video.
+
+# Audio Packets
+
+Phone -> Ebo?
+
+# Mic Packets
+
+Ebo -> Phone?
+
+# 
