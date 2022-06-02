@@ -1,6 +1,6 @@
 ---
 layout: post
-author: Etch
+author: Etch Lain3d
 title:  "Enabot Hacking: Part 2"
 date:   2022-02-18 1:01:37 -0500
 categories: Hardware-series
@@ -19,7 +19,9 @@ tags: etch  lain3d hardware IoT re enabot
 - [](#)
 
 ## Introduction
-Last post I covered the teardown and firmware extraction of the enabot. In this post I plan to begin the vulnerability research where I look for ways to break in. Hopefully this post ends with me beginning to develop an exploit.
+Last post I covered the teardown and firmware extraction of the enabot. Initially in this post I had hoped to look for vulnerabilities in the device and look for ways to exploit it. Lain3d ended up working on this as much as I did and we went in a different direction where we wanted to be able to control the device completely once before we exploited it. That way once we get in we'll have full control of the device and it'll just be more exciting. The whole process ended up being a ton of fun and a lot more challenging than we initially expected.
+
+*Not sure the best way to split up the writing yet. All 3rd person? Or a signature for each section? Don't really care*
 
 # Packet Analysis
 I'm hoping that there is a vulnerability in the basic ways this thing communicates with its raw api. Maybe there is a parsing bug or buffer overflow if we send some ridiculous packet.
