@@ -7,8 +7,8 @@ categories: Hardware-series
 ctf-category: PWN
 tags: etch  lain3d hardware IoT re enabot
 ---
-# Enabot Hacking: Part 1 -> Vulnerability Research
-- [Enabot Hacking: Part 1 -> Vulnerability Research](#enabot-hacking-part-1---vulnerability-research)
+# Enabot Hacking: Part 2 -> Reverse Engineering
+- [Enabot Hacking: Part 2 -> Reverse Engineering](#enabot-hacking-part-1---reverse-engineering)
   - [Introduction](#introduction)
 - [Packet Analysis](#packet-analysis)
   - [Software debugging](#software-debugging)
@@ -16,15 +16,24 @@ tags: etch  lain3d hardware IoT re enabot
 - [Video Packets](#video-packets)
 - [Audio Packets](#audio-packets)
 - [Mic Packets](#mic-packets)
-- [](#)
 
 ## Introduction
-Last post I covered the teardown and firmware extraction of the enabot. Initially in this post I had hoped to look for vulnerabilities in the device and look for ways to exploit it. Lain3d ended up working on this as much as I did and we went in a different direction where we wanted to be able to control the device completely once before we exploited it. That way once we get in we'll have full control of the device and it'll just be more exciting. The whole process ended up being a ton of fun and a lot more challenging than we initially expected.
+Last post I covered the teardown and firmware extraction of the enabot. Initially in this post I had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as I did and we went in a different direction where we wanted to be able to control the device completely once before we exploited it. That way once we get in we'll have full control of the device and it'll just be more exciting. The whole process ended up being a ton of fun and a lot more challenging than we initially expected.
 
 *Not sure the best way to split up the writing yet. All 3rd person? Or a signature for each section? Don't really care*
 
+*I spent a long time trying to write independent sections but since we both worked on some of the same topics I end up repeating what you have. I'm just going to write everything in third person.*
+
+**I think we should change the name of**
+```
+EboConnection -> EboSessionCreate
+EboControl -> EboSession
+EboHeartbeat -> EboControl (this is mainly mavlink/uart related stuff)
+```
+
+
 # Packet Analysis
-I'm hoping that there is a vulnerability in the basic ways this thing communicates with its raw api. Maybe there is a parsing bug or buffer overflow if we send some ridiculous packet.
+We are hoping that there is a vulnerability in the basic ways this thing communicates with its raw api. Maybe there is a parsing bug or buffer overflow if we send some ridiculous packet.
 
 I opened up wireshark and began looking at the stream of packets as I moved the ebo around. I was only seeing UDP packets and they all seemed to be encrypted in some way.
 
@@ -38,9 +47,11 @@ At the end of the packet it say "Charlie is". There is no way this is some coinc
 
 There it is. "Charlie is the designer of P2P!!". I figured whoever made this firmware probably didn't write that string, so I looked around to see if people had run into it before. 
 
-I was able to find these posts
-https://www.thirtythreeforty.net/posts/2020/05/hacking-reolink-cameras-for-fun-and-profit/
-https://www.ul.com/resources/privacy-risk-iot-cctv-camera-security
+I was able to find these posts:
+
+[Hacking Reolink Cameras for Fun and Profit](https://www.thirtythreeforty.net/posts/2020/05/hacking-reolink-cameras-for-fun-and-profit/)
+
+[Privacy Risk IOT CCTV Camera Security](https://www.ul.com/resources/privacy-risk-iot-cctv-camera-security)
 
 After reading through them it turns out the function is XORing the packet with the charlie string, and then scrambling it, although it doesn't appear to be scrambled in the packet I just saw. I tried the same thing they mention in the 2nd post where they found the .so file and used the function in it to descramble it, but the packet still just looked like random garbage.
 
@@ -125,7 +136,9 @@ I spent a lot of time trying to get around this. I tried disabling the kernel wa
 
 I figured since the firmware would open the file and store the file pointer in memory somewhere. If I could just use that file pointer in another process, maybe I could write the "V" character which supposedly disables the watchdog timer.
 
-In ghidra I found where it opened the watchdog file
+
+In ghidra I found where it opened the watchdog file:
+
 ![activate_watchdog](/assets/enabot_part2/actiavate_watchdog.png)
 
 I see it stores the pointer at 0x00499dcc. When I look at the XREFs of that pointer, I came across another function.
@@ -291,16 +304,48 @@ If you compare the bytes at the bottom of the after scramble image and the wires
 
 # Packet Reversing
 
-Reversing what these packets were doing was very tedious, but we managed to do it. Every type of packet has its own components which track sequences numbers, branches in the code, tokens, etc. This was figured out by staring at wireshark and the decompilation. Explaining these all at once doesn't seem possible, so the best way is probably to just go through a branch of the ebo protocol and explain each field. Then the important parts of meaningful packets can be explained.
+Reversing what these packets were doing was very tedious, but we managed to do it. Every type of packet has its own components which track sequences numbers, branches in the code, tokens, etc. At this point we can debug the target and capture the network traffic in wireshark, but it's too overwhelming to look at the bytes without dissecting them.
+
+We chose to use the [kaitai language](https://kaitai.io/) to help us after finding [this project](https://github.com/joushx/kaitai-to-wireshark) which can convert a kaitai file to a wireshark dissector! Lain3d's [fork](https://github.com/lain3d/kaitai-to-wireshark) of the project supports conditional statements. This allowed us to actually browse the packet capture like this:
+
+![EboProto](/assets/enabot_part2/ebo_proto.png)
+
+It's super neat that we can just write the specification of the packet structure in kaitai's simple format and the lua is generated for us.
+
+This is a snippet of the kaitai sequence for the enabot header:
+
+```
+seq:
+  - id: magic
+    contents: [0x04, 0x02]
+  - id: msg_type
+    size: 2
+  - id: len_minus_16
+    type: u2
+    # if 0xadd8, its a poll to remote server
+    # checking if accessing not on same wifi
+    if: msg_type != [0xad, 0xd8]
+  - id: connection
+    type: connection
+    if: msg_type == [0x19, 0x02]
+  - id: from_ebo
+    type: control
+    if: msg_type == [0x19, 0x0a]
+  - id: from_phone
+    type: control
+    if: msg_type == [0x19, 0x0b]
+```
+
+This worked well for deserialization, but what about for reserializing the data, since we want to be able to host our own enabot server? For this task we wrote the definitions for the packet structures using [scapy](https://github.com/secdev/scapy).
+
+Explaining all these packet definitions at once doesn't seem possible, so the best way is probably to just go through a branch of the ebo protocol and explain each field. Then the important parts of meaningful packets can be explained.
+
+Note: Since we don't actually know what each branch was when we started reversing. Alot of these types may not have the best names, but they aren't really worth changing till we're sure what they are, if that ever happens.
 
 
-
-Note: Since we don't actually know what each branch was when we started reversing. Alot of these types may not have the best names, but they aren't really worth changing till we're sure what they are if that ever happens.
-
-
-
-Every packet going to or from the device started with a message header. 
 ## Ebo Message Header
+
+Every packet going to or from the device started with this:
 
 ![MsgHdr](/assets/enabot_part2/ebo_msg_hdr.png)
 
@@ -312,7 +357,7 @@ Every packet going to or from the device started with a message header.
     * The `ConditionalField`'s determine what the next portion of the packet would be compared to the values in the `EboPacketType` enum
 3. Length1 is the length ebo protocol portion of the packet minus 16
     * Example: Motor packets are total length 115, their ebo protocol portion (UDP data portion) is 73. 73 - 16 = 0x39 so the value in the packet would be 0x3900 (little endian)
-    * Note: All the fields are little endian, but we didn't mark them all as such because it didn't matter for a lot of them.
+    * Note: Most of the fields are big endian, unless in the scapy definition the field starts with "LE".
 
 ## Ebo Control Packets
 
