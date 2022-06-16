@@ -1,7 +1,7 @@
 ---
 layout: post
 author: Etch Lain3d
-title:  "Enabot Hacking: Part 2"
+title:  "Enabot Hacking: Part 2 (draft lain3d)"
 date:   2022-02-18 1:01:37 -0500
 categories: Hardware-series
 ctf-category: PWN
