@@ -9,29 +9,24 @@ tags: etch  lain3d hardware IoT re enabot
 hidden: true
 ---
 # Enabot Hacking: Part 2 -> Reverse Engineering
-- [Enabot Hacking: Part 2 -> Reverse Engineering](#enabot-hacking-part-1---reverse-engineering)
-  - [Introduction](#introduction)
-- [Packet Analysis](#packet-analysis)
+- [Enabot Hacking: Part 2 -> Reverse Engineering](#enabot-hacking-part-2---reverse-engineering)
   - [Software debugging](#software-debugging)
   - [Bypassing the watchdog](#bypassing-the-watchdog)
-- [Video Packets](#video-packets)
-- [Audio Packets](#audio-packets)
-- [Mic Packets](#mic-packets)
 
 > The section below is kept for completeness, but we don't use this method anymore as we found a better one later on. For how we actually disable the watchdog, see [here](#current-watchdog-disable-method)
 
 ## Software debugging
 
-In the last post I mentioned hardware debugging, but Lain3d reminded me there was also another option which is software debugging. We have a shell so if we can find a binary of gdbserver that runs on the device, we can attach the firmware to it and debug it. Then we can simply break at the start of the charlie_scramble function and check argument 1 to see the packet before it gets XORed and/or scrambled.
+In the last post we mentioned hardware debugging, we realized there was also another option which is software debugging. We have a shell so if we can find a binary of gdbserver that runs on the device, we can attach the firmware to it and debug it. Then we can simply break at the start of the charlie_scramble function and check argument 1 to see the packet before it gets XORed and/or scrambled.
 
-Playoff-rondo sent me a repo of statically compiled gdbservers, and I found that the ```gdbserver-7.7.1-armel-eabi5-v1-sysv``` worked on the device since it was armv5t.
+Playoff-rondo sent us a repo of statically compiled gdbservers, and we found that the ```gdbserver-7.7.1-armel-eabi5-v1-sysv``` worked on the device since it was armv5t.
 
-I netcated the file to the device. Most of the device was readonly so we couldn't move the file, but because there is a place for the SD card, we can put the file there.
+We netcated the file to the device. Most of the device was readonly so we couldn't move the file, but because there is a place for the SD card, we can put the file there.
 
 On enabot ssh shell
  * nc -l -p 1234 > gdbserver
 
-On my PC
+On host PC
  * nc -w 3 X.X.X.X 1234 < gdbserver-7.7.1-armel-eabi5-v1-sysv
 
 Now that we have the file, we can attach it to the FW_ENABOT_C process and start debugging. The process ID was 541
@@ -40,7 +35,7 @@ Now that we have the file, we can attach it to the FW_ENABOT_C process and start
 ./gdbserver --attach X.X.X.X:5555 541
 ```
 
-Then in gdb-multiarch, I can simply do 
+Then in gdb-multiarch, we can simply do 
 
 ```
 target remote X.X.X.X 5555
@@ -50,32 +45,32 @@ It loads some symbols and other stuff, but after a bit, we are in the debugger! 
 
 ## Bypassing the watchdog
 
-It turns out this firmware uses a watchdog, and the timer is set to about 10 seconds. Every few seconds the firmware will reach out to the watchdog and say that it's doing okay, but when I'm debugging it, the process is halted. Because the watchdog doesn't get it's okay message, it restarts the device.
+It turns out this firmware uses a watchdog, and the timer is set to about 10 seconds. Every few seconds the firmware will reach out to the watchdog and say that it's doing okay, but when we're debugging it, the process is halted. Because the watchdog doesn't get it's okay message, it restarts the device.
 
-I spent a lot of time trying to get around this. I tried disabling the kernel watchdogs with ```sysctl```, I tried writing "V" to /dev/watchdog, but the file was busy, and a few other things that came up in google searches, but none of it worked.
+We spent a lot of time trying to get around this. We tried disabling the kernel watchdogs with ```sysctl```, we tried writing "V" to /dev/watchdog, but the file was busy, and a few other things that came up in google searches, but none of it worked.
 
 ![watchdog_busy](/assets/enabot_part2/watchdog_problem.png)
 
-I figured since the firmware would open the file and store the file pointer in memory somewhere. If I could just use that file pointer, maybe I could write the "V" character which supposedly disables the watchdog timer after it is activated.
+We figured since the firmware would open the file and store the file pointer in memory somewhere. If we could just use that file pointer, maybe we could write the "V" character which supposedly disables the watchdog timer after it is activated.
 
 
-In ghidra I found where it opened the watchdog file:
+In ghidra we found where it opened the watchdog file:
 
 ![activate_watchdog](/assets/enabot_part2/actiavate_watchdog.png)
 
-I see it stores the pointer at 0x00499dcc. When I look at the XREFs of that pointer, I came across another function.
+We can see it stores the pointer at 0x00499dcc. When we look at the XREFs of that pointer, we came across another function.
 
 ![set_timeout](/assets/enabot_part2/set_timeout.png)
 
-Looks like I can just use this function. If we act quickly enough into the debugger, we can save all the registers, set the argument of this function to some really large number, execute it, and then restore the registers to go back to normal execution.
+Looks like we can just use this function. If we act quickly enough into the debugger, we can save all the registers, set the argument of this function to some really large number, execute it, and then restore the registers to go back to normal execution.
 
-I did some more research and figured out the ioctl function is what really writes to the file. Looking at the kernel watchdog code and comparing it to the enabot value it sends to IOCTL, it looks like the last digit of the 0xc0045706 controls what functionality it does (the activate and write values in the other functions also lined up).
+We did some more research and figured out the ioctl function is what really writes to the file. Looking at the kernel watchdog code and comparing it to the enabot value it sends to IOCTL, it looks like the last digit of the 0xc0045706 controls what functionality it does (the activate and write values in the other functions also lined up).
 
 https://www.kernel.org/doc/Documentation/watchdog/watchdog-api.txt
 ![watchdog_header](/assets/enabot_part2/watchdog_header.png)
- "6" is for setting the watchdog timeout. I tried modifying that value to "4" for the set options functionality and then using the disable card option to disable the watchdog timer, but couldn't get it to work. The device was still restarting.
+ "6" is for setting the watchdog timeout. We tried modifying that value to "4" for the set options functionality and then using the disable card option to disable the watchdog timer, but couldn't get it to work. The device was still restarting.
 
-Setting the registers every time I wanted to debug was tedious, so wrote a gdb script to automate the entire process of attching the debugger, setting the registers, and returning back.
+Setting the registers every time we wanted to debug was tedious, so wrote a gdb script to automate the entire process of attching the debugger, setting the registers, and returning back.
 
 <details>
 <summary>Python gdb script</summary>
@@ -199,7 +194,7 @@ eval gdb-multiarch  $cli -x "$py " "FW_EBO_C"
 
 <br>
 
-Now if I run the bash script, it'll do the following
+Now if we run the bash script, it'll do the following
 1. SSH into device and attach gdbserver to the FW_EBO_C PID shown in the ```ps``` command to my host ip on port
 2. Close the SSH connection
 3. Open gdb and target remote to the device
@@ -209,9 +204,9 @@ Now if I run the bash script, it'll do the following
 7. Continue until it hits that breakpoint
 8. Restore the registers, and then break at the first instance of the charlie_scramble function
 
-After doing this it works! Mostly... The device will still restart after about 5-10 minutes, but it's a long enough window to comfortably debug something as simple as this. If it really becomes an issue I could look more into the disable watchdog command or make a script to automatically ping the watchdog every so often.
+After doing this it works! Mostly... The device will still restart after about 5-10 minutes, but it's a long enough window to comfortably debug something as simple as this. If it really becomes an issue we could look more into the disable watchdog command or make a script to automatically ping the watchdog every so often.
 
-Back to the packet analysis. So after hitting the breakpoint at the beginning of the charlie scramble function, I dumped out the bytes of the input packet to be scrambled, set a breakpoint at the end of the function, and dumped the bytes of the scrambled output bytes when it got there. Then I continued and watched the packet appear in wireshark after setting the filter to be only udp packets.
+Back to the packet analysis. So after hitting the breakpoint at the beginning of the charlie scramble function, we dumped out the bytes of the input packet to be scrambled, set a breakpoint at the end of the function, and dumped the bytes of the scrambled output bytes when it got there. Then we continued and watched the packet appear in wireshark after setting the filter to be only udp packets.
 
 Before scramble
 ![before_scramble](/assets/enabot_part2/scramble_start.png)
@@ -220,7 +215,7 @@ After scramble
 Wireshark scramble capture
 ![wireshark_scramble](/assets/enabot_part2/wireshark_capture_scramble.png)
 
-If you compare the bytes at the bottom of the after scramble image and the wireshark image, you'll see that they match. This means we can successfully capture the packet before it gets encrypted. Now the only issue is the decrypted bytes still don't mean anything. I was hoping they'd be in some simple format like JSON or something, but they're completely random bytes. Maybe this is only for raw video data and if I capture a packet of the device moving forward, it'll be in a better format.
+Comparing the bytes at the bottom of the after scramble image and the wireshark image, we see that they match. This means we can successfully capture the packet before it gets encrypted. Now the only issue is the decrypted bytes still don't mean anything. We were hoping they'd be in some simple format like JSON or something, but they're completely random bytes. Maybe this is only for raw video data and if we capture a packet of the device moving forward, it'll be in a better format.
 
 ## Current watchdog disable method
 
