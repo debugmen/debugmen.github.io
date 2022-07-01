@@ -10,32 +10,36 @@ tags: etch  lain3d hardware IoT re enabot
 
 # Enabot Hacking: Part 2 -> Reverse Engineering
 
-<!-- # Enabot Hacking: Part 2 -> Reverse Engineering
-- [Enabot Hacking: Part 2 -> Reverse Engineering](#enabot-hacking-part-1---reverse-engineering)
+- [Enabot Hacking: Part 2 -> Reverse Engineering](#enabot-hacking-part-2---reverse-engineering)
   - [Introduction](#introduction)
+  - [Contents](#contents)
 - [Packet Analysis](#packet-analysis)
-  - [Software debugging](#software-debugging)
-  - [Bypassing the watchdog](#bypassing-the-watchdog)
+- [Packet Reversing](#packet-reversing)
+  - [Ebo Message Header](#ebo-message-header)
+  - [Ebo Control Packets](#ebo-control-packets)
+  - [More of the Same](#more-of-the-same)
+- [Motor Packets](#motor-packets)
+  - [Button Packet Branches](#button-packet-branches)
 - [Video Packets](#video-packets)
 - [Audio Packets](#audio-packets)
-- [Mic Packets](#mic-packets) -->
+- [Mic Packets](#mic-packets)
+- [Connecting to the Ebo](#connecting-to-the-ebo)
+  - [Initial Connection](#initial-connection)
+  - [Starting the AVServer](#starting-the-avserver)
+  - [Starting the video packets](#starting-the-video-packets)
+- [Conclusion](#conclusion)
 
 - [Enabot Hacking: Part 1 -> Teardown and Firmware Extraction](#enabot-hacking-part-1---reverse-engineering)
   - [Introduction](#introduction)
   - [Contents](#contents)
 
 ## Introduction
-Last post I covered the teardown and firmware extraction of the enabot. Initially in this post I had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as I did and we went in a different direction where we wanted to be able to control the device completely once before we exploited it. That way once we get in we'll have full control of the device and it'll just be more exciting. The whole process ended up being a ton of fun and a lot more challenging than we initially expected.
+Last post we covered the teardown and firmware extraction of the enabot. Initially in this post we had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as Etch did and we went in a different direction where we wanted to be able to control the device completely once before we exploited it. That way once we get in we'll have full control of the device and it'll just be more exciting. The whole process ended up being a ton of fun and a lot more challenging than we initially expected.
 
-*REMOVEME: Not sure the best way to split up the writing yet. All 3rd person? Or a signature for each section? Don't really care*
-
-*REMOVEME: I spent a long time trying to write independent sections but since we both worked on some of the same topics I end up repeating what you have. I'm just going to write everything in third person.*
 
 ## Contents
 
 This post ended up getting pretty long so we decided to break it up into several posts.
-
-*REMOVEME: if you dont hink this is a good idea we can merge it back into one post, the idea is just to break it apart more so people can just click the parts they're interested in. We can hide the subsections from the frontpage so people only see this page.*
 
 
 - [Software debugging/watchdog]({% post_url 2022-03-10-enabot_series_part_2_debugging %})
@@ -52,25 +56,25 @@ EboHeartbeat -> EboControl (this is mainly mavlink/uart related stuff)
 # Packet Analysis
 We are hoping that there is a vulnerability in the basic ways this thing communicates with its raw api. Maybe there is a parsing bug or buffer overflow if we send some ridiculous packet.
 
-I opened up wireshark and began looking at the stream of packets as I moved the ebo around. I was only seeing UDP packets and they all seemed to be encrypted in some way.
+We opened up wireshark and began looking at the stream of packets as we moved the ebo around. We were only seeing UDP packets and they all seemed to be encrypted in some way.
 
-After looking at the data of some of the packets, I noticed this one.
+After looking at the data of some of the packets, we noticed this one.
 
 ![charlie](/assets/enabot_part2/charlie_capture.png)
 
-At the end of the packet it say "Charlie is". There is no way this is some coincidence of randomly generated data. There is probably some XOR encryption going on and those bytes were null bytes. I opened up the firmware in wireshark and checked if there were any strings with "Charlie is".
+At the end of the packet it say "Charlie is". There is no way this is some coincidence of randomly generated data. There is probably some XOR encryption going on and those bytes were null bytes. We opened up the firmware in wireshark and checked if there were any strings with "Charlie is".
 
 ![charlie_p2p](/assets/enabot_part2/charlie_is_the_designer_of_p2p.png)
 
-There it is. "Charlie is the designer of P2P!!". I figured whoever made this firmware probably didn't write that string, so I looked around to see if people had run into it before. 
+There it is. "Charlie is the designer of P2P!!". We figured whoever made this firmware probably didn't write that string, so we looked around to see if people had run into it before. 
 
-I was able to find these posts:
+We were able to find these posts:
 
 [Hacking Reolink Cameras for Fun and Profit](https://www.thirtythreeforty.net/posts/2020/05/hacking-reolink-cameras-for-fun-and-profit/)
 
 [Privacy Risk IOT CCTV Camera Security](https://www.ul.com/resources/privacy-risk-iot-cctv-camera-security)
 
-After reading through them it turns out the function is XORing the packet with the charlie string, and then scrambling it, although it doesn't appear to be scrambled in the packet I just saw. I tried the same thing they mention in the 2nd post where they found the .so file and used the function in it to descramble it, but the packet still just looked like random garbage.
+After reading through them it turns out the function is XORing the packet with the charlie string, and then scrambling it, although it doesn't appear to be scrambled in the packet we just saw. We tried the same thing they mention in the 2nd post where they found the .so file and used the function in it to descramble it, but the packet still just looked like random garbage.
 
 
 ```
@@ -117,7 +121,7 @@ int main(){
 
 ```
 
-
+After doing some debugging that can be read about in the separate post, we figured out that this was acurately unscrambling the data. We could see the unscrambled data before it was sent in GDB, and after unscrambling the scrambled packet in wireshark, it matched that initial unscrambled data. This meant the whole protocol this thing communicated on was just going to be a very big protocol with a bunch of random bytes and values it would branch on.
 
 # Packet Reversing
 
@@ -270,7 +274,7 @@ Right
 ![right](/assets/enabot_part2/right.png)
 
 
-The first four bytes were for forward and backward movement. We still don't know what they first two bytes do, they didn't seem to affect anything, but the next byte controlled the speed where 0 was the slowest, and the byte after that controlled the direction. `0xbf` moved forward and `0x3f` moved backwards. The next 4 bytes followed the same pattern but left and right. These two separate "motors" can also be used in conjunction to make sharper turns, but we haven't bothered to figure that out yet. For now we can move in all directions and that's all we care to achieve, currently...
+The first four bytes were for forward and backward movement. We still don't know what they first two bytes do, they didn't seem to affect anything, but the next byte controlled the speed where 0 was the slowest, and the byte after that controlled the direction. `0xbf` moved forward and `0x3f` moved backwards. The next 4 bytes followed the same pattern but left and right. These two separate "motors" can also be used in conjunction to make sharper turns. We implemenated all of these movements in our ebo server, hooked it up to WASD, and can move the ebo around as well as through the app!
 
 This testing process also shows how we did a large majority of reversing the ebo packets. 
 
@@ -318,4 +322,52 @@ Phone -> Ebo?
 
 Ebo -> Phone?
 
-# 
+# Connecting to the Ebo
+
+## Initial Connection
+## Starting the AVServer
+> Needs pictures
+
+The log prints after restarting FW_EBO_C were very useful for this whole process. We could compare the messages one at a time to see which appeared when we sent what packet.
+
+```
+2022-05-30 01:48:20.692 650-650 I/(AVAPIs_Server.c:3834 FZ_TUTK_Init) ------New connection created. Sid is 1,Cnt=2 gOnlineNum=1                         
+
+2022-05-30 01:48:20.696 650-753 D/(AVAPIs_Server.c:2173 thread_ForAVServerStart) SID[1], thread_ForAVServerStart, OK
+
+2022-05-30 01:48:20.751 650-753 D/(AVAPIs_Server.c:2238 thread_ForAVServerStart) Client(1) is from[IP:10.42.0.68, Port:55935] Mode[LAN] VPG[41496:1:41] VER[3030201] NAT[2] AES[0] gucMode[0]   
+```
+
+The messages above would appear when we connected from the phone, but when we connected from the ebo server, we didn't see that 3rd message. Looking in wireshark we could see that the next non heartbeat packet sent after our last one was a length 640 packet. 
+
+The bytes inside of this packet had some kind of ID string. And then a 32 byte value later down in the packet. After looking around the filesystem we found the matching string in /configs/token. The file had the matching ID string followed by another string. Our intuition led us to believe the 32 byte value in the packet was a SHA256 and that it was of the string that followed the ID. We were correct! The SHA256 matched of the string matched the 32 byte value found in the packet.
+
+Manually crafting that packet with the values from the token file and sending it to the ebo allowed that 3rd log message to appear that we weren't seeing before. We were one step closer to getting video packets!
+
+## Starting the video packets
+> Needs pictures
+
+This is still a work in progress, but we wanted to post this writeup due to it's length and how long it's been since the last one.
+
+After starting the AVServer, we still weren't seeing any video packets.
+
+When we connected from the phone we saw that it would make a request to it's API server to validate a sent token. It was obvious the packet length 1118 was triggering this because it was close after the 640 and was the only packet long enough to hold a token.
+
+Looking at the branch value of the packet, we were able to track it down in the decompilation. 
+
+> Insert decompiled code here
+
+Through some dynamic analysis before the call to AES_decrypt, we were able to match that part of the packet was the IV, the key was hardcoded in the firmware, and the rest of the packet was the ciphertext. After decrypting it, we got that json string as seen in the image above.
+
+This means that we control the key, iv, and ciphertext, so we can completely encrypt and send our own requests. As long as we can create a valid key for their check_user_auth_token API, we could connect with our own custom key. This is something we still have to test though, so for now we're just copying a fresh 1118 length packet and sending it. If it's recent enough and hasn't expired, we get all the matching log messages that let us know we're one step closer to getting video packets from the our ebo server.
+
+If we send an old length 1118 packet with a key that has expired, we get these log messages
+
+![video_log](/assets/enabot_part2/video_log.png)
+
+Notice the final green line where it has "false" and "-1"'s. This lets us know if our key has actually worked or not.
+
+We're currently working on the last step to start the video packets sending. We know exactly which packets are triggering it, but when we send them, the log messages that the video has started don't appear. This will be working and further explained in the next writeup.
+
+# Conclusion
+
