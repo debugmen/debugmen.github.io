@@ -524,3 +524,12 @@ We're currently working on the last step to start the video packets sending. We 
 
 # Conclusion
 
+This post covered a lot of information about reversing the ebo's protocol. We started all the way back from getting a shell on the device and ended up being able to craft custom packets to connect ot the ebo and move it around from our keyboard.
+
+We still aim to be able to get video packets from a connection from our ebo server so that we can have full control with an exploit.
+
+Next post we hope to cover the following.
+1. Getting video/audio/mic packets sent from the ebo
+2. Getting a fully functioning ebo server where we can move it around, see it's video, hear it's microphone, etc., all in real time in a GUI.
+3. Finding a vulnerability and developing an exploit that would allow us to connect an ebo to the ebo server without any authorization.
+4. Releasing and covering the source code of this whole project
