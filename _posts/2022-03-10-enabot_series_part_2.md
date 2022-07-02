@@ -14,6 +14,7 @@ tags: etch  lain3d hardware IoT re enabot
   - [Introduction](#introduction)
   - [Contents](#contents)
 - [Packet Analysis](#packet-analysis)
+- [Function Renaming](#function-renaming)
 - [Packet Reversing](#packet-reversing)
   - [Ebo Message Header](#ebo-message-header)
   - [Ebo Control Packets](#ebo-control-packets)
@@ -123,6 +124,158 @@ int main(){
 
 After doing some debugging that can be read about in the separate post, we figured out that this was acurately unscrambling the data. We could see the unscrambled data before it was sent in GDB, and after unscrambling the scrambled packet in wireshark, it matched that initial unscrambled data. This meant the whole protocol this thing communicated on was just going to be a very big protocol with a bunch of random bytes and values it would branch on.
 
+# Function Renaming
+
+We were able to get a lot of functions renamed from log prints. We had two separate scripts, one that would get the function name based off of a log print of it, and one that would get a function named based off a print after a failed function call.
+
+The first script is for the following scenario
+
+![log_print](/assets/enabot_part2/log_print.png)
+
+At the log print funtion, we see that it says "Handle_IOCTRL_Cmd" as one of the input strings, this was the 3rd argument. Our script goes through every function call to log print, gets it's third argument, and renames the function with the log print in it to that third argument. The function that called the log_print in the picture above was renamed to "Handle_IOCTRL_Cmd".
+
+Binary Ninja Script courtesy of Playoff-Rondo
+```
+log_print_sym = bv.get_symbol_by_raw_name("logger")
+rename_count = 0
+refs = bv.get_code_refs(log_print_sym.address)
+for ref in refs:
+    try:
+        hlil = ref.function.get_llil_at(ref.address).hlil
+
+        label_addr = ref.function.get_parameter_at(ref.address,None,3).value
+        label_string = bv.get_ascii_string_at(label_addr).value
+        #print(ref.function.start,ref.function.name,label_string)
+        ref.function.name=label_string
+        rename_count+=1
+    except:
+        pass
+
+print(f"Finished. Renamed: {rename_count} functions")
+```
+
+IDA Script
+```
+> Insert IDA Script
+
+```
+
+![log_functions_renamed](/assets/enabot_part2/log_functions_renamed.png)
+
+The second renaming script we used was for functiosn that were called, and then an error was printed if it returned an error code.
+
+![error_rename](/assets/enabot_part2/err_rename.png)
+
+An example is in the image above. A function was called and a branch was taken based off the function's return value. If it wasn't 0, it printed the name of the function and and error message. We could use that print to rename the function called. It's renamed already because we had already run the script when the image was taken
+
+The script below grabs all the error messages that are likely from a failed function call and then checks a few instructions back if there was a function call before it and renames it if there was. This one is much more unreliable and renamed a lot less functions. It would also list the strings that were likely function names but couldn't find a function call before there error string so they could be manually renamed.
+
+Binary Ninja Script
+```
+count = 0
+substrs = ["err 0x", "err:0x", "Fail !", "fail!!", "fail !"]
+max_search = 10
+extra_characters_in_string = 10
+strings = bv.strings
+
+test = "MI_VENC_CreateChn"
+# Get all strings and turn to function names
+chosen_strings = set()
+
+for astring in strings:
+    for substr in substrs:
+        if substr in astring.value:
+            value = astring.value.split(" err")[0]
+            if "(" in value:
+                value = value.split("(")[0]
+            if " Dev" in value:
+                value = value.split(" Dev")[0]
+            if " fail" in value.lower():
+                value = value.lower().split(" fail")[0]
+            new = StringReference(bv, 0, astring.start, len(value))
+            chosen_strings.add(new)
+
+print(f"Number of strings found matching substr {len(chosen_strings)}")
+
+# Get already named function
+function_names = list()
+functions = bv.functions
+for function in functions:
+    name = function.name
+    if "sub_" in name:
+        continue
+    for string in chosen_strings.copy():
+        if "_PROBABLY" in name:
+            name = name.replace("_PROBABLY", "")
+
+print(f"Number of functions that MAY be renamed {len(chosen_strings)}")
+count = 0
+unnamed_functions = list()
+
+for string in chosen_strings:
+    refs = bv.get_code_refs(string.start)
+    found = False
+    for ref in refs:
+        offset = 0
+        instr = "None"
+        while(True):
+            try:
+                instr = str(ref.function.get_llil_at(ref.address+offset).hlil)
+            except:
+                pass
+            offset+=2
+            if instr != "None" or offset > 2000:
+                break
+
+        lines = bv.get_functions_containing(ref.address)[0].hlil
+        lines = str(lines).split("\n")
+        lines = [x.lstrip().rstrip() for x in lines]
+        if instr in lines:
+            index = lines.index(str(instr))
+            for i in range(0,max_search):
+                try:
+                    check_line = lines[index-i]
+                except:
+                    break
+                # Make sure we don't pass an already named function
+                # And then misname one above it
+                for name in function_names:
+                    if name in check_line:
+                        found = True
+                        break
+                # Check for unnamed function in line
+                if 'sub_' in check_line:
+                    address = re.search('sub_(.*?)\(', check_line)
+                    temp=int(address.group(1),16)
+                    func = bv.get_function_at(temp)
+                    print(string.value)
+                    function_names.append(string.value)
+                    func.name = string.value + "-_PROBABLY"
+                    found = True
+                    count += 1
+                    break
+        if found == True:
+            break
+    if found == False:
+        found2 = False
+        for name in function_names:
+            if "MI_SYS_SetChnOutputPortDepth" in name:
+                print(name, string)
+            if string.value not in name:
+                 continue
+            else:
+                found2 = True
+        if found2 == False:
+            unnamed_functions.append(string.value)
+
+print(f"Renamed {count} functions")
+print(f"Unamed/Duplicate named functions : {unnamed_functions}")
+print(f"Len of unnamed functions {len(unnamed_functions)}")
+```
+
+![renamed_num](/assets/enabot_part2/err_rename_number.png)
+
+Both these scripts combined allowed us to know the name of about 1600 function calls which was very nice to have when reversing.
 # Packet Reversing
 
 Reversing what these packets were doing was very tedious, but we managed to do it. Every type of packet has its own components which track sequences numbers, branches in the code, tokens, etc. At this point we can debug the target and capture the network traffic in wireshark, but it's too overwhelming to look at the bytes without dissecting them.
@@ -353,13 +506,13 @@ After starting the AVServer, we still weren't seeing any video packets.
 
 When we connected from the phone we saw that it would make a request to it's API server to validate a sent token. It was obvious the packet length 1118 was triggering this because it was close after the 640 and was the only packet long enough to hold a token.
 
-Looking at the branch value of the packet, we were able to track it down in the decompilation. 
+Looking at the branch value of the packet (0x9930), we were able to track it down in the decompilation. 
 
-> Insert decompiled code here
+![aes](/assets/enabot_part2/aes256.png)
 
 Through some dynamic analysis before the call to AES_decrypt, we were able to match that part of the packet was the IV, the key was hardcoded in the firmware, and the rest of the packet was the ciphertext. After decrypting it, we got that json string as seen in the image above.
 
-This means that we control the key, iv, and ciphertext, so we can completely encrypt and send our own requests. As long as we can create a valid key for their check_user_auth_token API, we could connect with our own custom key. This is something we still have to test though, so for now we're just copying a fresh 1118 length packet and sending it. If it's recent enough and hasn't expired, we get all the matching log messages that let us know we're one step closer to getting video packets from the our ebo server.
+This means that we control we know the key, and control the iv, and ciphertext, so we can completely encrypt and send our own requests. As long as we can create a valid key for their check_user_auth_token API, we could connect with our own custom key. This is something we still have to test though, so for now we're just copying a fresh 1118 length packet and sending it. If it's recent enough and hasn't expired, we get all the matching log messages that let us know we're one step closer to getting video packets from the our ebo server.
 
 If we send an old length 1118 packet with a key that has expired, we get these log messages
 
