@@ -311,7 +311,7 @@ Explaining all these packet definitions at once doesn't seem possible, so the be
 Note: Since we don't actually know what each branch was when we started reversing. Alot of these types may not have the best names, but they aren't really worth changing till we're sure what they are, if that ever happens.
 
 
-## Ebo Message Header
+## Ebo Message Header Layer
 
 Every packet going to or from the device started with this:
 
@@ -327,11 +327,15 @@ Every packet going to or from the device started with this:
     * Example: Motor packets are total length 115, their ebo protocol portion (UDP data portion) is 73. 73 - 16 = 0x39 so the value in the packet would be 0x3900 (little endian)
     * Note: Most of the fields are big endian, unless in the scapy definition the field starts with "LE".
 
-## Ebo Control Packets
+From here, the packet can either use a EboSessionCreate type or an EboSession type:
 
-Almost all packets are control packets whether sent from the ebo or from the host.
+![EboMsgHdr_diagram](/assets/enabot_part2/ebomsghdr.png)
 
-![EboControl](/assets/enabot_part2/ebo_control_packets.png)
+## Ebo Session Layer
+
+Almost all packets after the original session creation are EboSession packets, regardless of the direction of the packets.
+
+![EboSession](/assets/enabot_part2/ebo_control_packets.png)
 
 1. `seq_no`: The first two bytes are the sequence number of the control packets. As each control packet is sent to the device, this value is incremented by 1.
 2. `fixed0 + fixed1`: The next two values are always fixed as `0x07042100`
@@ -342,6 +346,20 @@ Almost all packets are control packets whether sent from the ebo or from the hos
 7. `fixed3`: Another fixed value of `0x0002`
 8. `handshake`: This value is similar to the `session_token` value. It's just an agreed upon value that is sent from the host as validation that the packet originates from the same place after the connection is established. All control packets have to have the correct handshake to be accepted by the ebo after the connection is made.
 9. `branch1`: This is the first big branch in the packet types. It gets split up into different various things 
+
+![EboSession_diagram](/assets/enabot_part2/ebosession.png)
+
+## Ebo Session Creation Layer
+
+TODO: insert screenshot of EboSessionCreate code
+
+![Ebo](/assets/enabot_part2/ebo_new_connection.png)
+
+## Ebo Control Layer
+
+Ebo Control 
+
+![ebocontrol](/assets/enabot_part2/ebocontrol.png)
 
 ## More of the Same
 
@@ -392,7 +410,7 @@ Now that we undestand the branch values of these types of packets, it should be 
 
 This shows how tedious and hard decoding some of these packets was. This one packet alone pretty much had 4 branch values up to this point, and it felt like each branch value had multiple functions which handled them. We'd find a few branch values of one branch in one function and a few others of the same branch in another.
 
-This is why we spent so much time in wireshark. As much fun as reversing code is, sometimes there are just better ways to do reversing. This packet was much easier to figure out by just trial and error.
+This is why we spent so much time in wireshark. As much fun as reversing code is, sometimes there are just better ways to do reversing. This packet was much easier to figure out by just trial and error. When we hit a brick wall with this approach, then we would reverse the relevant function, usually with a better picture in mind from the info we learned doing the trial and error.
 
 In the two motor packets we see 8 bytes in the last full row of bytes. The packets have different values. We figured that since we knew all other parts of the packet, those values must control the direction and speed. So we setup a test.
 
@@ -426,7 +444,7 @@ The first four bytes were for forward and backward movement. We still don't know
 This testing process also shows how we did a large majority of reversing the ebo packets. 
 
 
-# Video Packets
+## Video Packets
 
 The video packets were very easy to identify in wireshark. Video data is going to be alot larger than any other packet because it's a bunch of raw data being sent. So all the packets that were length 1122 stood out. Even moreso since all the data after the ebo procol stuff was just a bunch of random bytes. The only thing we didn't know was what format the data was in. Knowing nothing about video streaming, we just looked at the strings. RTP, h265, and h264 all stood out and seemed to have to do with video stuff.
 
@@ -461,11 +479,11 @@ From here, more research went into starting the video packets after connecting t
 
 Now H264 also supports sending audio and I was hoping after I created the video it would have the sound along with it, but it turns out, the audio packets were entirely separate from video.
 
-# Audio Packets
+## Audio Packets
 
 Phone -> Ebo?
 
-# Mic Packets
+## Mic Packets
 
 Ebo -> Phone?
 
@@ -479,9 +497,15 @@ Starting the session is fairly simple, we can mostly replay the connection packe
 
 ![No Hearbeat](/assets/enabot_part2/ebo_no_heartbeat.png)
 
-From looking at the normal session in wireshark we noticed a few changes that happen in the response the phone sends back to the EBO upon receiving a packet. When we take these into account and resend the message then it will stay connected.
+From looking at the normal session in wireshark we noticed a few changes that happen in the response the phone sends back to the EBO upon receiving a packet. 
 
 ![Ebo heartbeat stay alive](/assets/enabot_part2/ebo_heartbeat_diagram.png)
+
+When we take these into account and resend the message then it will stay connected.
+
+## Trying to send motor packets
+
+We
 
 ## Starting the AVServer
 > Needs pictures
