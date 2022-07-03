@@ -351,19 +351,28 @@ Almost all packets after the original session creation are EboSession packets, r
 
 ## Ebo Session Creation Layer
 
+![EboNewConnection](/assets/enabot_part2/ebo_new_connection.png)
+
 TODO: insert screenshot of EboSessionCreate code
 
-![Ebo](/assets/enabot_part2/ebo_new_connection.png)
+The FromPhone and FromEBO layers are mostly the same, except the fixed4 is filled data differs in content and in length depending on the direction of the packet. Other than that it is always the same. The data is more complex if it is coming from the phone, but is still unknown.
 
 ## Ebo Control Layer
 
-Ebo Control 
+So far we have observed these packets being used for
+- Controlling the motors
+- Using skills
+- SelfCheck mode
+- Heartbeats / Acknowledgements
+
+The EBO is constantly sending what we call "heartbeats" to the phone that are basically messages that terminate after the EboMsgMavlink header with no further payload. They are further discussed in [the section on EboServer creation.](#initial-server)
 
 ![ebocontrol](/assets/enabot_part2/ebocontrol.png)
 
 ## More of the Same
 
 That really covers the basics of how these packets are layed out. Every path taken will just have more of the same with random fixed values, branch values, sequence numbers, etc. Now that there is a basic understanding of what these packets are doing, it'll be easier to explain the packets we actually care about. First we'll talk about the tooling we developed so that it can be referenced and understood as the packets below are explained. Keep in mind we developed these tools as we went.
+
 # Motor Packets
 
 Below are two motor packet which will be referenced in this section for comparison
