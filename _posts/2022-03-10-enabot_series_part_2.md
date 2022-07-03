@@ -154,12 +154,6 @@ for ref in refs:
 print(f"Finished. Renamed: {rename_count} functions")
 ```
 
-IDA Script
-```
-> Insert IDA Script
-
-```
-
 ![log_functions_renamed](/assets/enabot_part2/log_functions_renamed.png)
 
 The second renaming script we used was for functiosn that were called, and then an error was printed if it returned an error code.
@@ -475,9 +469,20 @@ Phone -> Ebo?
 
 Ebo -> Phone?
 
-# Connecting to the Ebo
+# Hosting an EBO Server
+## Initial Server
+For the standalone server, we basically want to see how far we can get pretending to be the phone. At first we tried simply replaying the packets the phone sent, while also fixing up obvious stuff like the ip address in the connection request so that the Ebo communicates with our PC instead of our phone.
 
-## Initial Connection
+The session looks like it starts successfully, but the actual things done during the session like movement, skills, etc, do not work. We think this is due to the session token changing each time as well as the sequence numbers of packets coming from the ebo drifting away from the ones we are sending as acknowledgement packets in the replay. 
+
+Starting the session is fairly simple, we can mostly replay the connection packets from the beginning of the session to start a new session to our pc. One issue we had was the EBO disconnecting about 20 seconds after the session started.
+
+![No Hearbeat](/assets/enabot_part2/ebo_no_heartbeat.png)
+
+From looking at the normal session in wireshark we noticed a few changes that happen in the response the phone sends back to the EBO upon receiving a packet. When we take these into account and resend the message then it will stay connected.
+
+![Ebo heartbeat stay alive](/assets/enabot_part2/ebo_heartbeat_diagram.png)
+
 ## Starting the AVServer
 > Needs pictures
 
