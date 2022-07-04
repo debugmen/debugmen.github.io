@@ -514,7 +514,13 @@ When we take these into account and resend the message then it will stay connect
 
 ## Trying to send motor packets
 
-We
+We had a lot of trouble with sending unique packets to the EBO via the server once connected. The EBO would move once when we sent a duplicated packet from a past capture. It would not move again upon sending the same packet, most likely due to the sequence number being the same. If we changed the sequence number in order to increment it, the EBO still wouldn't move! We played with the fields and no matter which field we changed, the EBO would no longer move. This was frustrating as it felt like we were vere so close. 
+
+To solve this we needed to spend time understanding the layout of the different subsystems running on the EBO. The strategy was simple, we needed to find a spot that breaks for the "good" motor packet, but not for a "bad" motor packet, where something has been changed. Once we have this, we can follow the logic backwards until we find why it's not making it through. However, there are a lot of threads running from the FW_EBO_C process. IOTC_Thread is the active thread upon decoding a received packet. It was not at all as straightforward as you might expect to figure out where the handlers for a given function actually are.
+
+Memory breakpoints were incredibly useful for finding where another thread interacted with the data seen written in one thread when it seems we have come to a dead end.
+
+Using
 
 ## Starting the AVServer
 > Needs pictures
