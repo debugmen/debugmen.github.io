@@ -16,16 +16,19 @@ tags: etch  lain3d hardware IoT re enabot
 - [Packet Analysis](#packet-analysis)
 - [Function Renaming](#function-renaming)
 - [Packet Reversing](#packet-reversing)
-  - [Ebo Message Header](#ebo-message-header)
-  - [Ebo Control Packets](#ebo-control-packets)
+  - [Ebo Message Header Layer](#ebo-message-header-layer)
+  - [Ebo Session Layer](#ebo-session-layer)
+  - [Ebo Session Creation Layer](#ebo-session-creation-layer)
+  - [Ebo Control Layer](#ebo-control-layer)
   - [More of the Same](#more-of-the-same)
 - [Motor Packets](#motor-packets)
   - [Button Packet Branches](#button-packet-branches)
-- [Video Packets](#video-packets)
-- [Audio Packets](#audio-packets)
-- [Mic Packets](#mic-packets)
-- [Connecting to the Ebo](#connecting-to-the-ebo)
-  - [Initial Connection](#initial-connection)
+  - [Video Packets](#video-packets)
+  - [Audio Packets](#audio-packets)
+  - [Mic Packets](#mic-packets)
+- [Hosting an EBO Server](#hosting-an-ebo-server)
+  - [Initial Server](#initial-server)
+  - [Trying to send motor packets](#trying-to-send-motor-packets)
   - [Starting the AVServer](#starting-the-avserver)
   - [Starting the video packets](#starting-the-video-packets)
 - [Conclusion](#conclusion)
@@ -415,7 +418,7 @@ Now that we undestand the branch values of these types of packets, it should be 
 
 ![MotorBinja](/assets/enabot_part2/motor_packet.png)
 
-*If only.* More often then not we'd go to a function which had our branch and we would have no clue what it was doing, at all... We know it takes this branch because of the `0xca` but the function it goes into seems to just unlock and lock some threads. 
+*If only.* More often then not we'd go to a function which had our branch and we would have no clue what it was doing, and figuring it out would be a lot of work. We know it takes this branch because of the `0xca` but the function it goes into seems to just unlock and lock some threads. 
 
 This shows how tedious and hard decoding some of these packets was. This one packet alone pretty much had 4 branch values up to this point, and it felt like each branch value had multiple functions which handled them. We'd find a few branch values of one branch in one function and a few others of the same branch in another.
 
@@ -523,7 +526,6 @@ Memory breakpoints were incredibly useful for finding where another thread inter
 Using
 
 ## Starting the AVServer
-> Needs pictures
 
 The log prints after restarting FW_EBO_C were very useful for this whole process. We could compare the messages one at a time to see which appeared when we sent what packet.
 
@@ -537,12 +539,14 @@ The log prints after restarting FW_EBO_C were very useful for this whole process
 
 The messages above would appear when we connected from the phone, but when we connected from the ebo server, we didn't see that 3rd message. Looking in wireshark we could see that the next non heartbeat packet sent after our last one was a length 640 packet. 
 
+![640](/assets/enabot_part2/640.png)
+
+
 The bytes inside of this packet had some kind of ID string. And then a 32 byte value later down in the packet. After looking around the filesystem we found the matching string in /configs/token. The file had the matching ID string followed by another string. Our intuition led us to believe the 32 byte value in the packet was a SHA256 and that it was of the string that followed the ID. We were correct! The SHA256 matched of the string matched the 32 byte value found in the packet.
 
 Manually crafting that packet with the values from the token file and sending it to the ebo allowed that 3rd log message to appear that we weren't seeing before. We were one step closer to getting video packets!
 
 ## Starting the video packets
-> Needs pictures
 
 This is still a work in progress, but we wanted to post this writeup due to it's length and how long it's been since the last one.
 
@@ -550,13 +554,19 @@ After starting the AVServer, we still weren't seeing any video packets.
 
 When we connected from the phone we saw that it would make a request to it's API server to validate a sent token. It was obvious the packet length 1118 was triggering this because it was close after the 640 and was the only packet long enough to hold a token.
 
+![1118](/assets/enabot_part2/1118.png)
+
 Looking at the branch value of the packet (0x9930), we were able to track it down in the decompilation. 
 
 ![aes](/assets/enabot_part2/aes256.png)
 
 Through some dynamic analysis before the call to AES_decrypt, we were able to match that part of the packet was the IV, the key was hardcoded in the firmware, and the rest of the packet was the ciphertext. After decrypting it, we got that json string as seen in the image above.
 
-This means that we control we know the key, and control the iv, and ciphertext, so we can completely encrypt and send our own requests. As long as we can create a valid key for their check_user_auth_token API, we could connect with our own custom key. This is something we still have to test though, so for now we're just copying a fresh 1118 length packet and sending it. If it's recent enough and hasn't expired, we get all the matching log messages that let us know we're one step closer to getting video packets from the our ebo server.
+This means we know the key, and control the iv, and ciphertext, so we can completely encrypt and send our own requests. As long as we can create a valid key for their check_user_auth_token API, we could connect with our own custom key. This is something we still have to test though, so for now we're just copying a fresh 1118 length packet and sending it. If it's recent enough and hasn't expired, we get all the matching log messages that let us know we're one step closer to getting video packets from the our ebo server.
+
+In the packet snapshot above, we can see the IV and ciphertext as 2 of the fields we parsed in our wireshark dissector
+
+![1118lua](/assets/enabot_part2/1118_lua.png)
 
 If we send an old length 1118 packet with a key that has expired, we get these log messages
 
