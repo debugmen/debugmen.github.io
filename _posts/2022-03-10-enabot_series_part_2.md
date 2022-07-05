@@ -33,10 +33,6 @@ tags: etch  lain3d hardware IoT re enabot
   - [Starting the video packets](#starting-the-video-packets)
 - [Conclusion](#conclusion)
 
-- [Enabot Hacking: Part 1 -> Teardown and Firmware Extraction](#enabot-hacking-part-1---reverse-engineering)
-  - [Introduction](#introduction)
-  - [Contents](#contents)
-
 ## Introduction
 Last post we covered the teardown and firmware extraction of the enabot. Initially in this post we had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as Etch did and we went in a different direction where we wanted to be able to control the device completely once before we exploited it. That way once we get in we'll have full control of the device and it'll just be more exciting. The whole process ended up being a ton of fun and a lot more challenging than we initially expected.
 
@@ -81,7 +77,7 @@ We were able to find these posts:
 After reading through them it turns out the function is XORing the packet with the charlie string, and then scrambling it, although it doesn't appear to be scrambled in the packet we just saw. We tried the same thing they mention in the 2nd post where they found the .so file and used the function in it to descramble it, but the packet still just looked like random garbage.
 
 
-```
+```c
 #include <stdio.h>
 #include <stdlib.h>
 #include <dlfcn.h>
@@ -125,7 +121,7 @@ int main(){
 
 ```
 
-After doing some debugging that can be read about in the separate post, we figured out that this was acurately unscrambling the data. We could see the unscrambled data before it was sent in GDB, and after unscrambling the scrambled packet in wireshark, it matched that initial unscrambled data. This meant the whole protocol this thing communicated on was just going to be a very big protocol with a bunch of random bytes and values it would branch on.
+After doing some debugging that can be read about in the separate post, we figured out that this was acurately unscrambling the data. We could see the unscrambled data before it was sent in GDB, and after unscrambling the scrambled packet in wireshark, it matched that initial unscrambled data. This meant the protocol this thing communicated on was just going to be tedious reverse. We have no strings indicating what each packet does, so we would have to match what the raw bytes in the packet were controlling in the firmware on the device.
 
 # Function Renaming
 
@@ -138,7 +134,7 @@ The first script is for the following scenario
 At the log print funtion, we see that it says "Handle_IOCTRL_Cmd" as one of the input strings, this was the 3rd argument. Our script goes through every function call to log print, gets it's third argument, and renames the function with the log print in it to that third argument. The function that called the log_print in the picture above was renamed to "Handle_IOCTRL_Cmd".
 
 Binary Ninja Script courtesy of Playoff-Rondo
-```
+```python
 log_print_sym = bv.get_symbol_by_raw_name("logger")
 rename_count = 0
 refs = bv.get_code_refs(log_print_sym.address)
@@ -168,7 +164,7 @@ An example is in the image above. A function was called and a branch was taken b
 The script below grabs all the error messages that are likely from a failed function call and then checks a few instructions back if there was a function call before it and renames it if there was. This one is much more unreliable and renamed a lot less functions. It would also list the strings that were likely function names but couldn't find a function call before there error string so they could be manually renamed.
 
 Binary Ninja Script
-```
+```python
 count = 0
 substrs = ["err 0x", "err:0x", "Fail !", "fail!!", "fail !"]
 max_search = 10
@@ -481,7 +477,7 @@ From the little bit I read about h264 from doing this research it seems that I-F
 The `FINAL_FRAME` was the last packet in a frame transmission, so the packet that's length 271 a few images above would have that branch value. The `P_FRAME2` value appeared in packets that were length 1130 but there were some additional fields that made the packet slightly longer. They still had the P-Frame header though, so looking into them further wasn't worth the time.
 
 
-Now all that was left was running the parser and generating the video. Apparently the appended bytes don't need run through ffmpeg and it can just be renamed to .mp4, but it was still done initially anyways. After running it through ffpmeg a real playable video popped out! We could nopw play video sent from the ebo by capturing, decoding, and stripping the bytes from packets.
+Now all that was left was running the parser and generating the video. Apparently the appended bytes don't need run through ffmpeg and it can just be renamed to .mp4, but it was still done initially anyways. After running it through ffpmeg a real playable video popped out! We could now play video sent from the ebo by capturing, decoding, and stripping the bytes from packets.
 
 
 <p style="text-align:center;"><iframe width="420" height="315" src="/assets/enabot_part2/video.mp4" frameborder="0" allowfullscreen></iframe></p>
