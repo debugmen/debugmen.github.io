@@ -21,8 +21,8 @@ tags: etch  lain3d hardware IoT re enabot
   - [Ebo Session Creation Layer](#ebo-session-creation-layer)
   - [Ebo Control Layer](#ebo-control-layer)
   - [More of the Same](#more-of-the-same)
-- [Motor Packets](#motor-packets)
-  - [Button Packet Branches](#button-packet-branches)
+- [Controlling the Ebo](#controlling-the-ebo)
+  - [Motor Packets/Button Packets](#motor-packetsbutton-packets)
   - [Video Packets](#video-packets)
   - [Audio Packets](#audio-packets)
   - [Mic Packets](#mic-packets)
@@ -31,6 +31,7 @@ tags: etch  lain3d hardware IoT re enabot
   - [Trying to send motor packets](#trying-to-send-motor-packets)
   - [Starting the AVServer](#starting-the-avserver)
   - [Starting the video packets](#starting-the-video-packets)
+  - [Ebo Server In Action](#ebo-server-in-action)
 - [Conclusion](#conclusion)
 
 ## Introduction
@@ -372,7 +373,11 @@ The EBO is constantly sending what we call "heartbeats" to the phone that are ba
 
 That really covers the basics of how these packets are layed out. Every path taken will just have more of the same with random fixed values, branch values, sequence numbers, etc. Now that there is a basic understanding of what these packets are doing, it'll be easier to explain the packets we actually care about. First we'll talk about the tooling we developed so that it can be referenced and understood as the packets below are explained. Keep in mind we developed these tools as we went.
 
-# Motor Packets
+# Controlling the Ebo
+
+We had reversed a lot of the packet protocol, but we still haven't covered how we actually sent them to the ebo to control it. The sections below will go over each functionality (that we care about) of the ebo. We'll go over how we were able to enable the functionality such as motor control, and then how we sent/recieved the packets to actually interact with the ebo.
+
+## Motor Packets/Button Packets
 
 Below are two motor packet which will be referenced in this section for comparison
 
@@ -383,9 +388,7 @@ Below are two motor packet which will be referenced in this section for comparis
 
 Some things mentioned in the packet section above should stand out like the sequence numbers increasing, the fixed values, and the token/handshake values. But other than that, how do we know this is a motor packet? The most telling thing is that it's length 115 (we can see that in wireshark, we don't expect you to count them). We setup wireshark, and started moving the ebo. When we did that we noticed packets of length 115 came through. When we stopped moving the ebo, they stopped appearing. 
 
-## Button Packet Branches
-
-After staring at packets long enough and pressing enough buttons, we could tell that the value `0xbeca` was somehow controlling the branch of what buttons we pressed because the `0xca` byte would change depending on what button. THEN we noticed that some of the buttons would have ANOTHER branch value immediately after that. Below is a packet of a pressed button, and we'll go through the decompiled code using the branch values to figure out which button was pressed.
+After staring at packets long enough and pressing enough buttons on the app, we could tell that the value `0xbeca` (seen in the packet above) was somehow controlling the branch of what buttons we pressed because the `0xca` byte would change depending on what button. THEN we noticed that some of the buttons would have ANOTHER branch value immediately after that. Below is a packet of a pressed button, and we'll go through the decompiled code using the branch values to figure out which button was pressed.
 
 ![TrickA](/assets/enabot_part2/trick_a.png)
 
@@ -544,8 +547,6 @@ Manually crafting that packet with the values from the token file and sending it
 
 ## Starting the video packets
 
-This is still a work in progress, but we wanted to post this writeup due to it's length and how long it's been since the last one.
-
 After starting the AVServer, we still weren't seeing any video packets.
 
 When we connected from the phone we saw that it would make a request to it's API server to validate a sent token. It was obvious the packet length 1118 was triggering this because it was close after the 640 and was the only packet long enough to hold a token.
@@ -564,13 +565,36 @@ In the packet snapshot above, we can see the IV and ciphertext as 2 of the field
 
 ![1118lua](/assets/enabot_part2/1118_lua.png)
 
-If we send an old length 1118 packet with a key that has expired, we get these log messages
+If we send a length 1118 packet from an old pcap with a key that has expired, we get these log messages
 
 ![video_log](/assets/enabot_part2/video_log.png)
 
 Notice the final green line where it has "false" and "-1"'s. This lets us know if our key has actually worked or not.
 
-We're currently working on the last step to start the video packets sending. We know exactly which packets are triggering it, but when we send them, the log messages that the video has started don't appear. This will be working and further explained in the next writeup.
+There were 2 final packets we knew we had to send because they would show up as 'Handle_IOCTRL_Cmd's in the logs. We could also see where this was getting hit in the decompilation.
+
+
+![video_start_log](/assets/enabot_part2/video_start_log.png)
+
+![1ff](/assets/enabot_part2/1ff_cmd.png)
+
+They both have hex command values, so we looked at wireshark and were easily able to identify which packets were triggering these log messages. They were the packets that were length 110. 
+
+![handleiocmd](/assets/enabot_part2/handleiocmd.png)
+
+
+
+Notice bytes 0x63-0x62 are 0x32a. There is another packet almost identical to this one but it has 0x1ff as the two bytes, and then immediately after the video packets start appearing in the capture.
+
+![videostarted](/assets/enabot_part2/video_started.png)
+
+Initially even though we knew we had to send these packets, when we did it wasn't working. After messing around with sending some of the packets that preceeded the packets we identified above, the video packets started rolling in! After messing around with starting the video from our ebo server, we noticed it didn't even require a key that worked, we could send an expired key and it didn't care. The only catch was that if we connected to the to the ebo from a phone, every time we connected to the ebo from our ebo server, it wanted heartbeat messages from the app. We get around this by just restarting FW_EBO_C everytime we connect though and it isn't an issue.
+
+We were then able to implement the video packets recieved into our ebo server and have a full GUI with the video stream.
+
+## Ebo Server In Action
+
+> Add video of it starting/moving around
 
 # Conclusion
 
