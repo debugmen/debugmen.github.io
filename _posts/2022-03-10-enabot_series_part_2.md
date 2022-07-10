@@ -403,7 +403,7 @@ Shows that when that value is 0xc8 we take that branch and we enter the `enterSe
 ```C
 if (mode??? == 0x2d)
 ```
-This is another branch that is taken when you start recording a video. When we press the record button in the app we could find a packet with the value `0x2d` at that spot and we'd know it's a packet to start recording.
+This is another branch that is taken when you start/stop recording a video because we can see the string that tells us that the camera's status. When we press the record button in the app we could find a packet with the value `0x2d` at that spot and we'd know it's a packet to start recording.
 
 So let's enter the `enterSelfCheckingMode` function, to then see the branches that can be taken inside of there...
 
@@ -419,11 +419,9 @@ Now that we undestand the branch values of these types of packets, it should be 
 
 *If only.* More often then not we'd go to a function which had our branch and we would have no clue what it was doing, and figuring it out would be a lot of work. We know it takes this branch because of the `0xca` but the function it goes into seems to just unlock and lock some threads. 
 
-This shows how tedious and hard decoding some of these packets was. This one packet alone pretty much had 4 branch values up to this point, and it felt like each branch value had multiple functions which handled them. We'd find a few branch values of one branch in one function and a few others of the same branch in another.
+This is why we spent some of our time reversing in wireshark. Some of these packets we didn't even need to look at the decompiled code to figure out what was happening. We could just use trial and error. Especially as we got more and more accustomed to how this protocol worked. However, when we hit a brick wall with this approach, then we would reverse the relevant function, usually with a better picture in mind from the info we learned doing the trial and error.
 
-This is why we spent so much time in wireshark. As much fun as reversing code is, sometimes there are just better ways to do reversing. This packet was much easier to figure out by just trial and error. When we hit a brick wall with this approach, then we would reverse the relevant function, usually with a better picture in mind from the info we learned doing the trial and error.
-
-In the two motor packets we see 8 bytes in the last full row of bytes. The packets have different values. We figured that since we knew all other parts of the packet, those values must control the direction and speed. So we setup a test.
+In this case, trial and error was the way to go. In the two motor packets we see 8 bytes in the last full row of bytes. The packets have different values for these values. We figured that since we knew all other parts of the packet, those values must control the direction and speed. So we setup a test.
 
 A capture was started, then the ebo was only moved forward, the capture was stopped, and a new capture was made only moving backwards, etc. until we had all 4 directions.
 
@@ -450,28 +448,25 @@ Right
 ![right](/assets/enabot_part2/right.png)
 
 
-The first four bytes were for forward and backward movement. We still don't know what they first two bytes do, they didn't seem to affect anything, but the next byte controlled the speed where 0 was the slowest, and the byte after that controlled the direction. `0xbf` moved forward and `0x3f` moved backwards. The next 4 bytes followed the same pattern but left and right. These two separate "motors" can also be used in conjunction to make sharper turns. We implemenated all of these movements in our ebo server, hooked it up to WASD, and can move the ebo around as well as through the app!
-
-This testing process also shows how we did a large majority of reversing the ebo packets. 
+The first four bytes were for forward and backward movement. We still don't know what they first three bytes do, they didn't seem to affect anything, but the last byte controlled the direction. `0xbf` moved forward and `0x3f` moved backwards. The next 4 bytes followed the same pattern but left and right. These two separate "motors" can also be used in conjunction to make sharper turns. We implemenated all of these movements in our ebo server, hooked it up to WASD, and can move the ebo around as well as through the app! We even added in all the tricks and hooked them up to 1, 2, 3, and 4.
 
 
 ## Video Packets
 
-The video packets were very easy to identify in wireshark. Video data is going to be alot larger than any other packet because it's a bunch of raw data being sent. So all the packets that were length 1122 stood out. Even moreso since all the data after the ebo procol stuff was just a bunch of random bytes. The only thing we didn't know was what format the data was in. Knowing nothing about video streaming, we just looked at the strings. RTP, h265, and h264 all stood out and seemed to have to do with video stuff.
+The video packets were very easy to identify in wireshark. Video data is going to be alot larger than any other packet because it's a bunch of raw data being sent. So all the packets that were length 1122 stood out. Even moreso since all the data after the ebo procol stuff was just a bunch of random bytes. The only thing we didn't know was what format the data was in. Knowing nothing about video streaming, we just looked at the strings in the firmware. RTP, h265, and h264 all stood out and seemed to have to do with video stuff.
 
-Again, way too much effort was put into looking at the code and debugging trying to figure out where it encoded the video. The answer was just in the captured packets
-
+Way too much effort was put into looking at the code and debugging trying to figure out where it encoded the video. The answer was just in the captured packets
 
 All the video packets came back to back so it was obvious to tell where the frame started, and then at the end there would still be a long packet, but it wouldnt be length 1122, and that was obviously the end of the frame.
 
 <p style="text-align:center;"><img src="/assets/enabot_part2/video_frame.png" alt="video frame" style="height: 400px; width:350px;"/></p>
 
 
-The first packet in the sequence always had the value `0x0141` at offset 0x65 (see image below). After a bunch of googling, some forum post talked about those bytes being the start of an h264 P-Frame. More googling and another forum or something talked about using ffmpeg to convert h264 data to a video. So I tried appending all the bytes that I assumed to be video data and ran it through ffmpeg to see if it would pop out a video file. That didn't work. Then I noticed that some of the sequence of video packets had the header `0x01d7`. Some more googling later, it turned out that was the start of a I-Frame. 
+The first packet in the sequence always had the value `0x0141` at offset 0x65 (see image below). After a bunch of googling, some forum post talked about those bytes being the start of an h264 P-Frame. More googling and another forum or something talked about using ffmpeg to convert h264 data to a video. So we tried appending all the bytes that we assumed to be video data and ran it through ffmpeg to see if it would pop out a video file. That didn't work. Then we noticed that some of the sequence of video packets had the header `0x01d7`. Some more googling later, it turned out that was the start of a I-Frame. 
 
 ![PFrame](/assets/enabot_part2/p_frame.png)
 
-From the little bit I read about h264 from doing this research it seems that I-Frames are the initial frame of a video and P-Frames then modify that frame until the next I-Frame is sent. Basically, the video has to start with an I-Frame or it won't have an initial base to modify and thus can't produce a video. So I wrote a parser to parse all the video packets, and appended their h264 data together while making sure the first frame of the video was a P-Frame. I did this based off of the `branch1` values in the packets.
+From the little bit we read about h264 from doing this research it seems that I-Frames are the initial frame of a video and P-Frames then modify that frame until the next I-Frame is sent. Basically, the video has to start with an I-Frame or it won't have an initial base to modify and thus can't produce a video. So we wrote a parser to parse all the video packets, and appended their h264 data together while making sure the first frame of the video was a P-Frame. We did this based off of the `branch1` values in the packets.
 
 
 <p style="text-align:center;"><img src="/assets/enabot_part2/h264_branches.png" alt="H264 Packet Branches" style="height: 100px; width:320px;"/></p>
@@ -486,9 +481,15 @@ Now all that was left was running the parser and generating the video. Apparentl
 <p style="text-align:center;"><iframe width="420" height="315" src="/assets/enabot_part2/video.mp4" frameborder="0" allowfullscreen></iframe></p>
 
 
-From here, more research went into starting the video packets after connecting to the ebo. If we could figure that out we could connect to the ebo, start the ebo's video streaming, recieve the packets on our server, and then open a video player to watch the video live. The results of this will be shown in the final section.
+From here, more research went into starting the video packets after connecting to the ebo. If we could figure that out we could accomplish the following. 
+1. We could connect to the ebo from our PC
+2. Start the ebo's video streaming
+3. Recieve the packets on our server
+4. Decode/append the packets into an h264 stream
+5. Open a video player to watch the video live in a GUI. 
+   
+We were actually able to accomplish all of this and the results will be shown in the final section.
 
-Now H264 also supports sending audio and I was hoping after I created the video it would have the sound along with it, but it turns out, the audio packets were entirely separate from video.
 
 ## Audio Packets
 
@@ -549,7 +550,7 @@ Manually crafting that packet with the values from the token file and sending it
 
 After starting the AVServer, we still weren't seeing any video packets.
 
-When we connected from the phone we saw that it would make a request to it's API server to validate a sent token. It was obvious the packet length 1118 was triggering this because it was close after the 640 and was the only packet long enough to hold a token.
+When we connected from the phone we saw that it would make a request to it's API server to validate a sent token. It was obvious the packet length 1118 was triggering this because it was close after the 640 and was the only packet long enough to hold an encoded JSON token.
 
 ![1118](/assets/enabot_part2/1118.png)
 
@@ -569,7 +570,7 @@ If we send a length 1118 packet from an old pcap with a key that has expired, we
 
 ![video_log](/assets/enabot_part2/video_log.png)
 
-Notice the final green line where it has "false" and "-1"'s. This lets us know if our key has actually worked or not.
+Notice the final green line where it has "false" and "-1"'s. This lets us know if our key has actually worked or not. Even though we were sending an expired key that returned -1, we were still able to move onto the next step of starting the camera, with or without the API's permission.
 
 There were 2 final packets we knew we had to send because they would show up as 'Handle_IOCTRL_Cmd's in the logs. We could also see where this was getting hit in the decompilation.
 
@@ -588,9 +589,9 @@ Notice bytes 0x63-0x62 are 0x32a. There is another packet almost identical to th
 
 ![videostarted](/assets/enabot_part2/video_started.png)
 
-Initially even though we knew we had to send these packets, when we did it wasn't working. After messing around with sending some of the packets that preceeded the packets we identified above, the video packets started rolling in! After messing around with starting the video from our ebo server, we noticed it didn't even require a key that worked, we could send an expired key and it didn't care. The only catch was that if we connected to the to the ebo from a phone, every time we connected to the ebo from our ebo server, it wanted heartbeat messages from the app. We get around this by just restarting FW_EBO_C everytime we connect though and it isn't an issue.
+Initially even though we knew we had to send these packets, when we did it wasn't working. After messing around with sending some of the packets that preceeded them, the video packets started rolling in! With some additional testing it came with a catch. If we connected to the to the ebo from a phone, every time we connected to the ebo from our ebo server, it wanted heartbeat messages from the app. When it didn't get them, it disconnected from our ebo server. We get around this by just restarting FW_EBO_C after connecting from a phone.
 
-We were then able to implement the video packets recieved into our ebo server and have a full GUI with the video stream.
+We were then able to implement the video packets recieved into our ebo server and made a full GUI with the video stream.
 
 ## Ebo Server In Action
 
