@@ -35,7 +35,7 @@ tags: etch  lain3d hardware IoT re enabot
 - [Conclusion](#conclusion)
 
 ## Introduction
-Last post we covered the teardown and firmware extraction of the enabot. Initially in this post we had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as Etch did and we went in a different direction where we wanted to be able to control the device completely once before we exploited it. That way once we get in we'll have full control of the device and it'll just be more exciting. The whole process ended up being a ton of fun and a lot more challenging than we initially expected.
+Last post we covered the teardown and firmware extraction of the enabot. Initially in this post we had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as Etch did and we ended up getting a bit carried in a different direction instead 😅. In this post we describe how we emulate all the features of the original phone app, from our own client developed in python. We discuss the process of reverse engineering the protocol, and figuring out how to use the data the Enabot sends us. We think it will be much more exciting now for our next post on the vulnerabilities in the device. We hope you enjoy this post, the whole process ended up being a ton of fun and a lot more challenging than we initially expected 🥳.
 
 
 ## Contents
