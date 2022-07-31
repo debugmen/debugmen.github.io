@@ -493,11 +493,47 @@ We were actually able to accomplish all of this and the results will be shown in
 
 ## Audio Packets
 
-Phone -> Ebo?
+We could tell that the packets coming from the Ebo that were length 370 were the audio packets because they only showed up when we enabled the aduio in the app. 
+
+![Audio](/assets/enabot_part2/audio_packet.png)
+
+After looking through the firmware we could tell it was encoded with the [G711](https://en.wikipedia.org/wiki/G.711) audio codec based on the strings. We also realized that the audio files ended with ".g711a" in the configs folder. 
+
+If we concatenated all the bytes together from a packets capture from wireshark, we could run it through FFMPEG and hear what we said through the phone.
+
+`ffmpeg -f alaw -ar 8000 -i test.g711a output.wav`
+
+The bandwidth of G711 is supposed to be 64Kbits/s and this lined up with what we saw. Every second, about 32 audio packets would come through. Each audio packet contained 0x100 bytes. 
+
+64Kbits/s / 8 bits/byte / 0x100 bytes/packet = 31.25 packets. This just verifies that what we were seeing makes sense.
+
+We want to playback the audio live as it comes through using pyaudio.
+
+![G711](/assets/enabot_part2/alaw.png)
+
+
+Keep in mind G711 is a lossless compression algorithm that reduces size of data being sent by 50%. So when we decode the a_law data it doubles in size, but the sample rate remains the same even though each sample decoded sample is 2 bytes instead of 1.
+
+Since each byte in G711 is a sample and there are 256 samples per packet we can set out block size to 256, and our frequency is 8000. After decoding the data using the decode_alaw function from the G711 package, we can write the bytes to our pyaudio stream and hear the audio perfectly through our speakers.
+
 
 ## Mic Packets
 
-Ebo -> Phone?
+The mic packets were the same as the audio packets, but with a slightly modified samples/second. There were 0x1e0 bytes of data in each packet instead of 0x100.
+
+![mic](/assets/enabot_part2/mic.png)
+
+Since more data is being sent in each packets, we know that the samples per packet was different. We can do
+
+8000samples/s / 0x1e0 samples/packet = 16.66 packets
+
+Looking through wireshark it was safe to say that about 16-17 packets were sent every second for microphone data so this again lined up.
+
+Since we semi-verified the frequency is again 8000Hz we know it's probably G711A again. Therefore we know that the samples per packet is 0x1e0 since again each byte is 1 sample.
+
+Now we can grab microphone sound from our microphone using pyaudio. We set the frequency to 8000 and the block size to 480 (0x1e0). Then we read data from our pyaudio microphone steams in chunks of 480 and send it to the ebo server to then send to the ebo. After implementing all this, we could hear ourselves talk through the ebo. 
+
+Unfortunately there is a loud whitenoise in the background, but we added mute buttons for both the audio and the microphone in the GUI so that it doesn't get annoying after awhile.
 
 # Hosting an EBO Server
 ## Initial Server
@@ -599,12 +635,12 @@ We were then able to implement the video packets recieved into our ebo server an
 
 # Conclusion
 
-This post covered a lot of information about reversing the ebo's protocol. We started all the way back from getting a shell on the device and ended up being able to craft custom packets to connect ot the ebo and move it around from our keyboard.
+This post covered a lot of information about reversing the ebo's protocol. We started all the way back from getting a shell on the device and ended up being able to craft a custom server to connect to the ebo and have full control over it's audio, microphone, motors, and camera.
 
-We still aim to be able to get video packets from a connection from our ebo server so that we can have full control with an exploit.
+The next step is finding a vulnerability that will let us connect to the ebo from our server without knowing the ID numbers or token beforehand. This could be accomplished by finding a vulnerability in the packet parser that we could develop and exploit for to get a shell on the device or have it send back a packet containing those things. Then we could simply read out the token file and be able to connect.
 
 Next post we hope to cover the following.
-1. Getting video/audio/mic packets sent from the ebo
-2. Getting a fully functioning ebo server where we can move it around, see it's video, hear it's microphone, etc., all in real time in a GUI.
-3. Finding a vulnerability and developing an exploit that would allow us to connect an ebo to the ebo server without any authorization.
-4. Releasing and covering the source code of this whole project
+1. Emulation of the packet receive function with Qiling so that we can fuzz the packet input
+2. Identifying a vulnerablity from one of the crashes that could possibly be exploited
+3. Developing an exploit that will let us control memory and get a shell
+4. Using memory/shell access to manipulate the Ebo so that it will accept a connection from the ebo server without a proper key or ID number.
