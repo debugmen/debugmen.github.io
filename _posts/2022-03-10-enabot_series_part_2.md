@@ -55,9 +55,9 @@ EboHeartbeat -> EboControl (this is mainly mavlink/uart related stuff)
 
 
 # Packet Analysis
-We are hoping that there is a vulnerability in the basic ways this thing communicates with its raw api. Maybe there is a parsing bug or buffer overflow if we send some ridiculous packet.
+We are hoping that there is a vulnerability in the basic ways this thing communicates with its raw api. Maybe there is a parsing bug or buffer overflow if we send some ridiculous packet. This program is pretty complicated, with many threads that interact with each other via shared buffers or using RDT.
 
-We opened up wireshark and began looking at the stream of packets as we moved the ebo around. We were only seeing UDP packets and they all seemed to be encrypted in some way.
+With this in mind, we opened up wireshark and began looking at the stream of packets as we moved the ebo around. We were only seeing UDP packets and they all seemed to be encrypted in some way.
 
 After looking at the data of some of the packets, we noticed this one.
 
@@ -335,7 +335,7 @@ From here, the packet can either use a EboSessionCreate type or an EboSession ty
 
 Almost all packets after the original session creation are EboSession packets, regardless of the direction of the packets.
 
-![EboSession](/assets/enabot_part2/ebo_control_packets.png)
+![EboSession](/assets/enabot_part2/ebo_session_packets.png)
 
 1. `seq_no`: The first two bytes are the sequence number of the control packets. As each control packet is sent to the device, this value is incremented by 1.
 2. `fixed0 + fixed1`: The next two values are always fixed as `0x07042100`
