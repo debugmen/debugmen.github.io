@@ -596,7 +596,7 @@ We were then able to implement the video packets recieved into our ebo server an
 
 ## Starting Speaker and Mic packets
 
-After starting the video, we also had trouble starting the microphone and speaker data. We knew what packets we had to send because they were the normal 110 length IOCmdControl packets. However when we sent them, they weren't enabling. After some trial and error, we figured out we had to send a few packets before and after. We didn't look too much further into why they had to be sent, but part of the reason was so sequence numbers lined up.
+After starting the video, we also had trouble starting the microphone and speaker data. We knew what packets we had to send because they were the same 110 length IOCmdControl packets that we had to send to enable the video. However when we sent them, they weren't enabling. After some trial and error, we figured out we had to send a few packets before and after. We didn't look too much further into why they had to be sent, but part of the reason was so sequence numbers lined up.
 
 Code where it branches to enable the audio
 
