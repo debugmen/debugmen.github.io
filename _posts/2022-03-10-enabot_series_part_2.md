@@ -24,13 +24,14 @@ tags: etch  lain3d hardware IoT re enabot
 - [Controlling the Ebo](#controlling-the-ebo)
   - [Motor Packets/Button Packets](#motor-packetsbutton-packets)
   - [Video Packets](#video-packets)
-  - [Audio Packets](#audio-packets)
-  - [Mic Packets](#mic-packets)
 - [Hosting an EBO Server](#hosting-an-ebo-server)
   - [Initial Server](#initial-server)
   - [Trying to send motor packets](#trying-to-send-motor-packets)
   - [Starting the AVServer](#starting-the-avserver)
   - [Starting the video packets](#starting-the-video-packets)
+  - [Starting Audio and Mic packets](#starting-audio-and-mic-packets)
+  - [Audio Packets](#audio-packets)
+  - [Mic Packets](#mic-packets)
   - [Ebo Server In Action](#ebo-server-in-action)
 - [Conclusion](#conclusion)
 
@@ -491,49 +492,6 @@ From here, more research went into starting the video packets after connecting t
 We were actually able to accomplish all of this and the results will be shown in the final section.
 
 
-## Audio Packets
-
-We could tell that the packets coming from the Ebo that were length 370 were the audio packets because they only showed up when we enabled the aduio in the app. 
-
-![Audio](/assets/enabot_part2/audio_packet.png)
-
-After looking through the firmware we could tell it was encoded with the [G711](https://en.wikipedia.org/wiki/G.711) audio codec based on the strings. We also realized that the audio files ended with ".g711a" in the configs folder. 
-
-If we concatenated all the bytes together from a packets capture from wireshark, we could run it through FFMPEG and hear what we said through the phone.
-
-`ffmpeg -f alaw -ar 8000 -i test.g711a output.wav`
-
-The bandwidth of G711 is supposed to be 64Kbits/s and this lined up with what we saw. Every second, about 32 audio packets would come through. Each audio packet contained 0x100 bytes. 
-
-64Kbits/s / 8 bits/byte / 0x100 bytes/packet = 31.25 packets. This just verifies that what we were seeing makes sense.
-
-We want to playback the audio live as it comes through using pyaudio.
-
-![G711](/assets/enabot_part2/alaw.png)
-
-
-Keep in mind G711 is a lossless compression algorithm that reduces size of data being sent by 50%. So when we decode the a_law data it doubles in size, but the sample rate remains the same even though each sample decoded sample is 2 bytes instead of 1.
-
-Since each byte in G711 is a sample and there are 256 samples per packet we can set out block size to 256, and our frequency is 8000. After decoding the data using the decode_alaw function from the G711 package, we can write the bytes to our pyaudio stream and hear the audio perfectly through our speakers.
-
-
-## Mic Packets
-
-The mic packets were the same as the audio packets, but with a slightly modified samples/second. There were 0x1e0 bytes of data in each packet instead of 0x100.
-
-![mic](/assets/enabot_part2/mic.png)
-
-Since more data is being sent in each packets, we know that the samples per packet was different. We can do
-
-8000samples/s / 0x1e0 samples/packet = 16.66 packets
-
-Looking through wireshark it was safe to say that about 16-17 packets were sent every second for microphone data so this again lined up.
-
-Since we semi-verified the frequency is again 8000Hz we know it's probably G711A again. Therefore we know that the samples per packet is 0x1e0 since again each byte is 1 sample.
-
-Now we can grab microphone sound from our microphone using pyaudio. We set the frequency to 8000 and the block size to 480 (0x1e0). Then we read data from our pyaudio microphone steams in chunks of 480 and send it to the ebo server to then send to the ebo. After implementing all this, we could hear ourselves talk through the ebo. 
-
-Unfortunately there is a loud whitenoise in the background, but we added mute buttons for both the audio and the microphone in the GUI so that it doesn't get annoying after awhile.
 
 # Hosting an EBO Server
 ## Initial Server
@@ -628,6 +586,63 @@ Notice bytes 0x63-0x62 are 0x32a. There is another packet almost identical to th
 Initially even though we knew we had to send these packets, when we did it wasn't working. After messing around with sending some of the packets that preceeded them, the video packets started rolling in! With some additional testing it came with a catch. If we connected to the to the ebo from a phone, every time we connected to the ebo from our ebo server, it wanted heartbeat messages from the app. When it didn't get them, it disconnected from our ebo server. We get around this by just restarting FW_EBO_C after connecting from a phone.
 
 We were then able to implement the video packets recieved into our ebo server and made a full GUI with the video stream.
+
+## Starting Audio and Mic packets
+
+After starting the video, we also had trouble starting the microphone and audio data. We knew what packets we had to send because they were the normal 110 length IOCmdControl packets. However when we sent them, they weren't enabling. After some trial and error, we figured out we had to send a few packets before and after. We didn't look too much further into why they had to be sent, but part of the reason was so sequence numbers lined up.
+
+Code where it branches to enable the audio
+![enable_audio](/assets/enabot_part2/audio_start1.png)
+
+Code where it branches to enable the microphone packets
+![enable_mic](/assets/enabot_part2/mic_start.png)
+
+Log of us enabling audio and microphone
+![audio_mic_start](/assets/enabot_part2/mic_audio_start.png)
+
+## Audio Packets
+
+We could tell that the packets coming from the Ebo that were length 370 were the audio packets because they only showed up when we enabled the aduio in the app. 
+
+![Audio](/assets/enabot_part2/audio_packet.png)
+
+After looking through the firmware we could tell it was encoded with the [G711](https://en.wikipedia.org/wiki/G.711) audio codec based on the strings. We also realized that the audio files ended with ".g711a" in the configs folder. 
+
+If we concatenated all the bytes together from a packets capture from wireshark, we could run it through FFMPEG and hear what we said through the phone.
+
+`ffmpeg -f alaw -ar 8000 -i test.g711a output.wav`
+
+The bandwidth of G711 is supposed to be 64Kbits/s and this lined up with what we saw. Every second, about 32 audio packets would come through. Each audio packet contained 0x100 bytes. 
+
+64Kbits/s / 8 bits/byte / 0x100 bytes/packet = 31.25 packets. This just verifies that what we were seeing makes sense.
+
+We want to playback the audio live as it comes through using pyaudio.
+
+![G711](/assets/enabot_part2/alaw.png)
+
+
+Keep in mind G711 is a lossless compression algorithm that reduces size of data being sent by 50%. So when we decode the a_law data it doubles in size, but the sample rate remains the same even though each sample decoded sample is 2 bytes instead of 1.
+
+Since each byte in G711 is a sample and there are 256 samples per packet we can set out block size to 256, and our frequency is 8000. After decoding the data using the decode_alaw function from the G711 package, we can write the bytes to our pyaudio stream and hear the audio perfectly through our speakers.
+
+
+## Mic Packets
+
+The mic packets were the same as the audio packets, but with a slightly modified samples/second. There were 0x1e0 bytes of data in each packet instead of 0x100.
+
+![mic](/assets/enabot_part2/mic.png)
+
+Since more data is being sent in each packets, we know that the samples per packet was different. We can do
+
+8000samples/s / 0x1e0 samples/packet = 16.66 packets
+
+Looking through wireshark it was safe to say that about 16-17 packets were sent every second for microphone data so this again lined up.
+
+Since we semi-verified the frequency is again 8000Hz we know it's probably G711A again. Therefore we know that the samples per packet is 0x1e0 since again each byte is 1 sample.
+
+Now we can grab microphone sound from our microphone using pyaudio. We set the frequency to 8000 and the block size to 480 (0x1e0). Then we read data from our pyaudio microphone steams in chunks of 480 and send it to the ebo server to then send to the ebo. After implementing all this, we could hear ourselves talk through the ebo. 
+
+Unfortunately there is a loud whitenoise in the background, but we added mute buttons for both the audio and the microphone in the GUI so that it doesn't get annoying after awhile.
 
 ## Ebo Server In Action
 
