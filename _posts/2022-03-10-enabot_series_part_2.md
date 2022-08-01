@@ -2,13 +2,19 @@
 layout: post
 author: Etch Lain3d
 title:  "Enabot Hacking: Part 2"
+toc: true
 date:   2022-02-18 1:01:37 -0500
 categories: Hardware-series
 ctf-category: PWN
 tags: etch  lain3d hardware IoT re enabot
 ---
 
+
 # Enabot Hacking: Part 2 -> Reverse Engineering
+
+
+
+<h2>Table of Contents</h2>
 
 - [Enabot Hacking: Part 2 -> Reverse Engineering](#enabot-hacking-part-2---reverse-engineering)
   - [Introduction](#introduction)
@@ -35,6 +41,10 @@ tags: etch  lain3d hardware IoT re enabot
   - [Mic Packets](#mic-packets)
   - [Ebo Server In Action](#ebo-server-in-action)
 - [Conclusion](#conclusion)
+- [Tools](#tools)
+
+
+
 
 ## Introduction
 Last post we covered the teardown and firmware extraction of the enabot. Initially in this post we had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as Etch did and we ended up getting a bit carried in a different direction instead 😅. In this post we describe how we emulate all the features of the original phone app, from our own client developed in python. We discuss the process of reverse engineering the protocol, and figuring out how to use the data the Enabot sends us. We think it will be much more exciting now for our next post on the vulnerabilities in the device. We hope you enjoy this post, the whole process ended up being a ton of fun and a lot more challenging than we initially expected 🥳.
@@ -670,3 +680,20 @@ Next post we hope to cover the following.
 2. Identifying a vulnerablity from one of the crashes that could possibly be exploited
 3. Developing an exploit that will let us control memory and get a shell
 4. Using memory/shell access to manipulate the Ebo so that it will accept a connection from the ebo server without a proper key or ID number.
+
+# Tools
+
+* Decompilers / Static Analysis
+    * [Binary Ninja](https://binary.ninja/)
+    * [IDA](https://hex-rays.com/ida-pro/)
+    * [Ghidra](https://ghidra-sre.org/)
+* Languages
+    * Python3
+    * C
+    * Bash
+* Debuggers / Dynamic Analysis
+    * [GDB](https://sourceware.org/gdb/) and [GEF](https://hugsy.github.io/gef/) / ([pwndbg](https://github.com/pwndbg/pwndbg) with [Splitmind](https://github.com/jerdna-regeiz/splitmind))
+* Packet analysis
+    * [Wireshark](https://www.wireshark.org/)
+    * [Lain3d forked katitai-to-wireshark](https://github.com/lain3d/kaitai-to-wireshark)
+    * [Kaitai Struct](https://kaitai.io/)

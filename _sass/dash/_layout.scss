@@ -133,15 +133,11 @@
   }
 
   ol > li {
-    margin-left: 1em;
     text-align: left;
     margin-bottom: 0.2em;
-    &:before {
-      content: $icon-minus;
-      @include font-awesome-icon;
-      margin-right: 0.5em;
+    @include themed() {
+       color: t('list-primary');
     }
-    
   }
 
   ul > li {
@@ -151,11 +147,12 @@
        color: t('list-primary');
     }
     list-style: none;
-    margin-left: 0;
+    margin-left: 0em;
 
     &:before {
       content: $icon-check;
       @include font-awesome-icon;
+      margin-left: 0;
       margin-right: 0.5em;
     }
   }
@@ -167,7 +164,7 @@
        color: t('list-primary');
     }
     list-style: none;
-    margin-left: 0;
+    margin-left: 0.5em;
 
     &:before {
       content: $icon-chevron-right;
