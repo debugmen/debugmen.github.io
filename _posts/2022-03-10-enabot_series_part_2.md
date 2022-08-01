@@ -50,20 +50,12 @@ tags: etch  lain3d hardware IoT re enabot
 Last post we covered the teardown and firmware extraction of the enabot. Initially in this post we had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as Etch did and we ended up getting a bit carried in a different direction instead 😅. In this post we describe how we emulate all the features of the original phone app, from our own client developed in python. We discuss the process of reverse engineering the protocol, and figuring out how to use the data the Enabot sends us. We think it will be much more exciting now for our next post on the vulnerabilities in the device. We hope you enjoy this post, the whole process ended up being a ton of fun and a lot more challenging than we initially expected 🥳.
 
 
-## Contents
+## Debugging the device
 
-This post ended up getting pretty long so we decided to break it up into several posts.
+This post ended up getting pretty long so we decided to put our debugging setup in a different page.
 
 
 - [Software debugging/watchdog]({% post_url 2022-03-10-enabot_series_part_2_debugging %})
-
-
-**I think we should change the name of**
-```
-EboConnection -> EboSessionCreate
-EboControl -> EboSession
-EboHeartbeat -> EboControl (this is mainly mavlink/uart related stuff)
-```
 
 
 # Packet Analysis
@@ -544,9 +536,113 @@ The receive part of the thread acts as a state machine. One byte of data comes i
 <p style="text-align:center;"><img src="/assets/enabot_part2/uart_recv.png" alt="EBO Uart Recv" style="height: 550px; width:482px;"/></p>
 <p style="text-align:center;"><img src="/assets/enabot_part2/uart_recv2.png" alt="EBO Uart Recv2" style="height: 100%; width: 100%;"/></p>
 
+We can read out the entire "message" that is sent to this thread and compare it to the corresponding step in the state machine:
 
+```
+                                                        
+  EboMsgMavlinkType    Action                      motor1        motor2               crc
+          v              v                           v             v                   v
+data:  [fe 11] 00 0c 00 [ca] 00 00 00 00 00 00 [40 be 00 00] [00 00 00 00] 00 00 01 [15 27]
+stage: [01 02] 04 03 05 [06] 07 07 07 07 07 07 [07 07 07 07] [07 07 07 07] 07 07 07 [08 09]
+```
+
+The expected crc is calculated based on this message and some global data that is constant. We opted to reimplement the algorithm and call it from our python code to get the expected crc.
+
+```c
+u8 cmds[] = {0xc4,0x2c,0xd3,0x22,0xe8,0x2a,0x13,0xde,0x56,0x44,0x64,0x41,0xdf,0x75,0x79,0x9e,0x72,0x4d,0x54,0xe2,0x09,0x20,0xb6,0x4e,0xed,0x97,0x64,0x9f,0xa4,0xd0,0x34,0xd9};
+
+u32 calc_crc(u8* buf) {
+    u32 tutk_type = 1;
+    u8 mem_0;
+    u8 mem_1;
+    u8 mem_2;
+    u8 mem_3;
+    u32 local_mem0;
+    u16 motor_xor0;
+    u16 motor_xor1;
+    u32 motor_xor2;
+    u8 motor_xor3;
+    u8 c_2 = 0;
+    u32 v4;
+    u32 v5;
+    while(1) {
+        u8 c = *buf;
+        buf = buf+1;
+        switch(tutk_type) {
+            case 0:
+            case 1:
+                if (c == 0xfe) {
+                    tutk_type = 2;
+                    // missing assignment
+                    mem_0 = 0;
+                    motor_xor0 = 0xffff;
+                }
+                goto cont;
+            case 2:
+                motor_xor2 = motor_xor0;
+                mem_0 = c;
+                mem_2 = 0;
+                motor_xor3 = c ^ motor_xor0;
+                tutk_type = 4;
+                goto in_s5_lower;
+            case 3:
+                motor_xor2 = motor_xor0;
+                local_mem0 = 5;
+                // missing assignment
+                goto in_s5;
+            case 4:
+                motor_xor2 = motor_xor0;
+                local_mem0 = 3;
+                mem_3 = c;
+                goto in_s5;
+            case 5:
+                motor_xor2 = motor_xor0;
+                local_mem0 = 6;
+            in_s5:
+                tutk_type = local_mem0;
+                motor_xor3 = c ^ motor_xor2;
+            in_s5_lower:
+                motor_xor0 = ((motor_xor2 >> 8) ^ ((u8)(motor_xor3 ^ (16 * motor_xor3)) >> 4) | ((u8)(motor_xor3 ^ (16 * motor_xor3)) << 8)) ^ (8 * (u8)(motor_xor3 ^ (16 * motor_xor3)));
+                goto cont;
+            case 6:
+                c_2 = c;
+                motor_xor1 = c;
+                motor_xor0 = (HIBYTE(motor_xor0) ^ ((u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))) >> 4) | ((u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))) << 8)) ^ (8 * (u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))));
+                if (!mem_0) {
+                    goto s7_lower;
+                }
+                tutk_type = 7;
+                goto cont;
+            case 7:;
+                unsigned char v7 = mem_2;
+                u32 v8 = (u8)(v7+1);
+                mem_2 = v8;
+                motor_xor0 = (HIBYTE(motor_xor0) ^ ((u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))) >> 4) | ((u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))) << 8)) ^ (8 * (u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))));
+                if ( (u8)mem_0 == v8 ) {
+            s7_lower:
+                    tutk_type = 8;
+                }
+                goto cont;
+            case 8:
+                v4 = (u8)(motor_xor0 ^ cmds[c_2-0xc8] ^ (16 * (motor_xor0 ^ cmds[c_2-0xc8])));
+                v5 = (HIBYTE(motor_xor0) ^ (v4 >> 4) | (v4 << 8)) ^ (8 * v4);
+                
+                v5 = bswap_16(v5);
+                //printf("crc: : %x\n", v5);
+                return v5;
+        }
+cont:
+        mem_1 = 0;
+        continue;
+    }
+}
+```
+
+Once we added this step to our scapy extension, we could move the EBO as desired!
 
 ## Starting the AVServer
+
+Our next goal was to get the AVServer up so we could get some audio/video packets.
 
 The log prints after restarting FW_EBO_C were very useful for this whole process. We could compare the messages one at a time to see which appeared when we sent what packet.
 
@@ -560,7 +656,7 @@ The log prints after restarting FW_EBO_C were very useful for this whole process
 
 The messages above would appear when we connected from the phone, but when we connected from the ebo server, we didn't see that 3rd message. Looking in wireshark we could see that the next non heartbeat packet sent after our last one was a length 640 packet. 
 
-<p style="text-align:center;"><img src="/assets/enabot_part2/640.png" alt="640" style="height: 40%; width: 40%;"/></p>
+<p style="text-align:center;"><img src="/assets/enabot_part2/640.png" alt="640" style="height: 70%; width: 70%;"/></p>
 
 
 The bytes inside of this packet had some kind of ID string. And then a 32 byte value later down in the packet. After looking around the filesystem we found the matching string in /configs/token. The file had the matching ID string followed by another string. Our intuition led us to believe the 32 byte value in the packet was a SHA256 and that it was of the string that followed the ID. We were correct! The SHA256 matched of the string matched the 32 byte value found in the packet.
@@ -573,7 +669,7 @@ After starting the AVServer, we still weren't seeing any video packets.
 
 When we connected from the phone we saw that it would make a request to it's API server to validate a sent token. It was obvious the packet length 1118 was triggering this because it was close after the 640 and was the only packet long enough to hold an encoded JSON token.
 
-<p style="text-align:center;"><img src="/assets/enabot_part2/1118.png" alt="1118" style="height: 40%; width: 40%;"/></p>
+<p style="text-align:center;"><img src="/assets/enabot_part2/1118.png" alt="1118" style="height: 70%; width: 70%;"/></p>
 
 Looking at the branch value of the packet (0x9930), we were able to track it down in the decompilation. 
 
@@ -634,7 +730,7 @@ Log of us enabling audio and microphone
 
 We could tell that the packets coming from the Ebo that were length 370 were the speaker packets because they only showed up when we enabled the aduio in the app. 
 
-![Audio](/assets/enabot_part2/audio_packet.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/audio_packet.png" alt="audio" style="height: 60%; width: 60%;"/></p>
 
 After looking through the firmware we could tell it was encoded with the [G711](https://en.wikipedia.org/wiki/G.711) audio codec based on the strings. We also realized that the audio files ended with ".g711a" in the configs folder. 
 
@@ -660,7 +756,7 @@ Since each byte in G711 is a sample and there are 256 samples per packet we can 
 
 The mic packets were the same as the audio packets, but with a slightly modified samples/second. There were 0x1e0 bytes of data in each packet instead of 0x100.
 
-![mic](/assets/enabot_part2/mic.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/mic.png" alt="mic_packets" style="height: 60%; width: 60%;"/></p>
 
 Since more data is being sent in each packets, we know that the samples per packet was different. We can do
 
@@ -682,7 +778,7 @@ Unfortunately there is a loud whitenoise in the background, but we added mute bu
 
 This post covered a lot of information about reversing the ebo's protocol. We started all the way back from getting a shell on the device and ended up being able to craft a custom server to connect to the ebo and have full control over it's audio, microphone, motors, and camera.
 
-The next step is finding a vulnerability that will let us connect to the ebo from our server without knowing the ID numbers or token beforehand. This could be accomplished by finding a vulnerability in the packet parser that we could develop and exploit for to get a shell on the device or have it send back a packet containing those things. Then we could simply read out the token file and be able to connect.
+The next step is finding a vulnerability that will let us connect to the ebo from our server without knowing the ID numbers or token beforehand. This could be accomplished by finding a vulnerability in the packet parser that we could develop and exploit for to get a shell on the device or have it send back a packet containing those things. Then we could simply read out of the token file and be able to connect.
 
 Next post we hope to cover the following.
 1. Emulation of the packet receive function with Qiling so that we can fuzz the packet input
