@@ -23,14 +23,15 @@ tags: etch  lain3d hardware IoT re enabot
   - [More of the Same](#more-of-the-same)
 - [Controlling the Ebo](#controlling-the-ebo)
   - [Motor Packets/Button Packets](#motor-packetsbutton-packets)
+  - [Audio Packets](#audio-packets)
   - [Video Packets](#video-packets)
 - [Hosting an EBO Server](#hosting-an-ebo-server)
   - [Initial Server](#initial-server)
   - [Trying to send motor packets](#trying-to-send-motor-packets)
   - [Starting the AVServer](#starting-the-avserver)
   - [Starting the video packets](#starting-the-video-packets)
-  - [Starting Audio and Mic packets](#starting-audio-and-mic-packets)
-  - [Audio Packets](#audio-packets)
+  - [Starting Speaker and Mic packets](#starting-speaker-and-mic-packets)
+  - [Speaker Packets](#speaker-packets)
   - [Mic Packets](#mic-packets)
   - [Ebo Server In Action](#ebo-server-in-action)
 - [Conclusion](#conclusion)
@@ -453,6 +454,20 @@ For awhile thought that on the motors were controlled only by the last byte such
 
 Using simple convertsions, we were able to actively add a slider to control the speed of the ebo in the ebo server GUI.
 
+## Audio Packets
+
+Looking through the firmware and filesystem, we knew that it was encoding the audio in the G711 format just based off of strings and filenames.
+
+G711 strings in the firmware
+
+![g711](/assets/enabot_part2/g711_strings.png)
+
+Files with the .g711a extensions
+
+![g711a](/assets/enabot_part2/g711a.png)
+
+
+This will be covered more in depth in the ebo server section where we dicuss the G711 format and how we were able to send and play audio in realtime on the ebo server.
 
 ## Video Packets
 
@@ -472,7 +487,7 @@ The first packet in the sequence always had the value `0x0141` at offset 0x65 (s
 From the little bit we read about h264 from doing this research it seems that I-Frames are the initial frame of a video and P-Frames then modify that frame until the next I-Frame is sent. Basically, the video has to start with an I-Frame or it won't have an initial base to modify and thus can't produce a video. So we wrote a parser to parse all the video packets, and appended their h264 data together while making sure the first frame of the video was a P-Frame. We did this based off of the `branch1` values in the packets.
 
 
-<p style="text-align:center;"><img src="/assets/enabot_part2/h264_branches.png" alt="H264 Packet Branches" style="height: 100px; width:320px;"/></p>
+<p style="text-align:center;"><img src="/assets/enabot_part2/h264_branches.png" alt="H264 Packet Branches" style="height: 200px; width:320px;"/></p>
 
 
 The `FINAL_FRAME` was the last packet in a frame transmission, so the packet that's length 271 a few images above would have that branch value. The `P_FRAME2` value appeared in packets that were length 1130 but there were some additional fields that made the packet slightly longer. They still had the P-Frame header though, so looking into them further wasn't worth the time.
@@ -482,16 +497,6 @@ Now all that was left was running the parser and generating the video. Apparentl
 
 
 <p style="text-align:center;"><iframe width="420" height="315" src="/assets/enabot_part2/video.mp4" frameborder="0" allowfullscreen></iframe></p>
-
-
-From here, more research went into starting the video packets after connecting to the ebo. If we could figure that out we could accomplish the following. 
-1. We could connect to the ebo from our PC
-2. Start the ebo's video streaming
-3. Recieve the packets on our server
-4. Decode/append the packets into an h264 stream
-5. Open a video player to watch the video live in a GUI. 
-   
-We were actually able to accomplish all of this and the results will be shown in the final section.
 
 
 
@@ -589,22 +594,25 @@ Initially even though we knew we had to send these packets, when we did it wasn'
 
 We were then able to implement the video packets recieved into our ebo server and made a full GUI with the video stream.
 
-## Starting Audio and Mic packets
+## Starting Speaker and Mic packets
 
-After starting the video, we also had trouble starting the microphone and audio data. We knew what packets we had to send because they were the normal 110 length IOCmdControl packets. However when we sent them, they weren't enabling. After some trial and error, we figured out we had to send a few packets before and after. We didn't look too much further into why they had to be sent, but part of the reason was so sequence numbers lined up.
+After starting the video, we also had trouble starting the microphone and speaker data. We knew what packets we had to send because they were the normal 110 length IOCmdControl packets. However when we sent them, they weren't enabling. After some trial and error, we figured out we had to send a few packets before and after. We didn't look too much further into why they had to be sent, but part of the reason was so sequence numbers lined up.
 
 Code where it branches to enable the audio
+
 ![enable_audio](/assets/enabot_part2/audio_start1.png)
 
 Code where it branches to enable the microphone packets
+
 ![enable_mic](/assets/enabot_part2/mic_start.png)
 
 Log of us enabling audio and microphone
+
 ![audio_mic_start](/assets/enabot_part2/mic_audio_start.png)
 
-## Audio Packets
+## Speaker Packets
 
-We could tell that the packets coming from the Ebo that were length 370 were the audio packets because they only showed up when we enabled the aduio in the app. 
+We could tell that the packets coming from the Ebo that were length 370 were the speaker packets because they only showed up when we enabled the aduio in the app. 
 
 ![Audio](/assets/enabot_part2/audio_packet.png)
 
