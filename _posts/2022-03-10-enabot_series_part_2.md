@@ -156,18 +156,20 @@ for ref in refs:
 print(f"Finished. Renamed: {rename_count} functions")
 ```
 
-![log_functions_renamed](/assets/enabot_part2/log_functions_renamed.png)
+<img src="/assets/enabot_part2/log_functions_renamed.png" alt="log_functions_renamed" style="height: 60%; width: 60%;"/>
 
-The second renaming script we used was for functiosn that were called, and then an error was printed if it returned an error code.
+The second renaming script we used was for functions that were called, and then an error was printed if it returned an error code.
 
-![error_rename](/assets/enabot_part2/err_rename.png)
+<img src="/assets/enabot_part2/err_rename.png" alt="err_rename" style="height: 60%; width: 60%;"/>
 
 An example is in the image above. A function was called and a branch was taken based off the function's return value. If it wasn't 0, it printed the name of the function and and error message. We could use that print to rename the function called. It's renamed already because we had already run the script when the image was taken
 
 The script below grabs all the error messages that are likely from a failed function call and then checks a few instructions back if there was a function call before it and renames it if there was. This one is much more unreliable and renamed a lot less functions. It would also list the strings that were likely function names but couldn't find a function call before there error string so they could be manually renamed.
 
-Binary Ninja Script
-```python
+Binary Ninja Script:
+<details>
+<summary>Click to expand</summary>
+<pre>
 count = 0
 substrs = ["err 0x", "err:0x", "Fail !", "fail!!", "fail !"]
 max_search = 10
@@ -267,9 +269,10 @@ for string in chosen_strings:
 print(f"Renamed {count} functions")
 print(f"Unamed/Duplicate named functions : {unnamed_functions}")
 print(f"Len of unnamed functions {len(unnamed_functions)}")
-```
+</pre>
+</details>
 
-![renamed_num](/assets/enabot_part2/err_rename_number.png)
+<img src="/assets/enabot_part2/err_rename_number.png" alt="err_rename_number" style="height: 60%; width: 60%;"/>
 
 Both these scripts combined allowed us to know the name of about 1600 function calls which was very nice to have when reversing.
 # Packet Reversing
@@ -317,7 +320,7 @@ Note: Since we don't actually know what each branch was when we started reversin
 
 Every packet going to or from the device started with this:
 
-![MsgHdr](/assets/enabot_part2/ebo_msg_hdr.png)
+<img src="/assets/enabot_part2/ebo_msg_hdr.png" alt="Ebo Msg Hdr" style="height: 50%; width: 50%;"/>
 
 <img src="/assets/enabot_part2/ebo_packet_type.png" alt="Ebo Packet Type" style="height: 100px; width:320px;"/>
 
@@ -331,13 +334,13 @@ Every packet going to or from the device started with this:
 
 From here, the packet can either use a EboSessionCreate type or an EboSession type:
 
-![EboMsgHdr_diagram](/assets/enabot_part2/ebomsghdr.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/ebomsghdr.png" alt="ebomsghdr" style="height: 35%; width:35%;"/></p>
 
 ## Ebo Session Layer
 
 Almost all packets after the original session creation are EboSession packets, regardless of the direction of the packets.
 
-![EboSession](/assets/enabot_part2/ebo_session_packets.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/ebo_session_packets.png" alt="ebo_session_packets" style="height: 75%; width:75%;"/></p>
 
 1. `seq_no`: The first two bytes are the sequence number of the control packets. As each control packet is sent to the device, this value is incremented by 1.
 2. `fixed0 + fixed1`: The next two values are always fixed as `0x07042100`
@@ -349,11 +352,11 @@ Almost all packets after the original session creation are EboSession packets, r
 8. `handshake`: This value is similar to the `session_token` value. It's just an agreed upon value that is sent from the host as validation that the packet originates from the same place after the connection is established. All control packets have to have the correct handshake to be accepted by the ebo after the connection is made.
 9. `branch1`: This is the first big branch in the packet types. It gets split up into different various things 
 
-![EboSession_diagram](/assets/enabot_part2/ebosession.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/ebosession.png" alt="ebosession" style="height: 50%; width:50%;"/></p>
 
 ## Ebo Session Creation Layer
 
-![EboNewConnection](/assets/enabot_part2/ebo_new_connection.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/ebo_new_connection.png" alt="ebo_new_connection" style="height: 35%; width:35%;"/></p>
 
 TODO: insert screenshot of EboSessionCreate code
 
@@ -369,7 +372,7 @@ So far we have observed these packets being used for
 
 The EBO is constantly sending what we call "heartbeats" to the phone that are basically messages that terminate after the EboMsgMavlink header with no further payload. They are further discussed in [the section on EboServer creation.](#initial-server)
 
-![ebocontrol](/assets/enabot_part2/ebocontrol.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/ebocontrol.png" alt="ebocontrol" style="height: 35%; width:35%;"/></p>
 
 ## More of the Same
 
@@ -383,16 +386,16 @@ We had reversed a lot of the packet protocol, but we still haven't covered how w
 
 Below are two motor packet which will be referenced in this section for comparison
 
-![Motor1](/assets/enabot_part2/motor1.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/motor1.png" alt="motor_1" style="height: 55%; width:55%;"/></p>
 
 
-![Motor2](/assets/enabot_part2/motor2.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/motor2.png" alt="motor_2" style="height: 55%; width:55%;"/></p>
 
 Some things mentioned in the packet section above should stand out like the sequence numbers increasing, the fixed values, and the token/handshake values. But other than that, how do we know this is a motor packet? The most telling thing is that it's length 115 (we can see that in wireshark, we don't expect you to count them). We setup wireshark, and started moving the ebo. When we did that we noticed packets of length 115 came through. When we stopped moving the ebo, they stopped appearing. 
 
 After staring at packets long enough and pressing enough buttons on the app, we could tell that the value `0xbeca` (seen in the packet above) was somehow controlling the branch of what buttons we pressed because the `0xca` byte would change depending on what button. THEN we noticed that some of the buttons would have ANOTHER branch value immediately after that. Below is a packet of a pressed button, and we'll go through the decompiled code using the branch values to figure out which button was pressed.
 
-![TrickA](/assets/enabot_part2/trick_a.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/trick_a.png" alt="trick_a" style="height: 55%; width:55%;"/></p>
 
 At 0x5e we see the value `0xbec8`. Now that 0xbe seems to always be constant, but the 0xc8 changes depending on what we press. We can see some of the branches based off that value below in the decompilation of the firmware.
 
@@ -427,27 +430,27 @@ In this case, trial and error was the way to go. In the two motor packets we see
 
 A capture was started, then the ebo was only moved forward, the capture was stopped, and a new capture was made only moving backwards, etc. until we had all 4 directions.
 
-Then we compared the bytes of the packets and after a little testing using the ebo_server motor functionality and adjusting values in the motor packets slightly, it was easy to figure out what was happening. Keep your focused on the 0x60 lines in the following packets and try to spot the patterns.
+Then we compared the bytes of the packets and after a little testing using the ebo_server motor functionality and adjusting values in the motor packets slightly, it was easy to figure out what was happening. Keep your eyes focused on the lines of hex on offset 0x60 in the following packets and try and spot the patterns.
 
 Forward
 
 
-![forward](/assets/enabot_part2/forward.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/forward.png" alt="forward" style="height: 55%; width:55%;"/></p>
 
 Backward
 
 
-![backward](/assets/enabot_part2/backward.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/backward.png" alt="backward" style="height: 55%; width:55%;"/></p>
 
 Left
 
 
-![forward](/assets/enabot_part2/left.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/left.png" alt="left" style="height: 55%; width:55%;"/></p>
 
 Right
 
 
-![right](/assets/enabot_part2/right.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/right.png" alt="right" style="height: 55%; width:55%;"/></p>
 
 
 For awhile thought that on the motors were controlled only by the last byte such as 0xbf or 0x3f since the other bytes would've been a massive int value. After looking back at it we realized that each group of 4 bytes is and IEEE float number and 0x3f and 0xbf were just chaning the value to positive or negative. For example the motor value for the "Right" image above is 0x3f97a68b which is really 1.18477 in float32. The value for the "Left" image is 0xbfd4a775 which is really -1.661360 in float32. 
@@ -460,11 +463,11 @@ Looking through the firmware and filesystem, we knew that it was encoding the au
 
 G711 strings in the firmware
 
-![g711](/assets/enabot_part2/g711_strings.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/g711_strings.png" alt="g711_strings" style="height: 55%; width:55%;"/></p>
 
 Files with the .g711a extensions
 
-![g711a](/assets/enabot_part2/g711a.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/g711a.png" alt="g711a" style="height: 55%; width:55%;"/></p>
 
 
 This will be covered more in depth in the ebo server section where we dicuss the G711 format and how we were able to send and play audio in realtime on the ebo server.
@@ -477,12 +480,12 @@ Way too much effort was put into looking at the code and debugging trying to fig
 
 All the video packets came back to back so it was obvious to tell where the frame started, and then at the end there would still be a long packet, but it wouldnt be length 1122, and that was obviously the end of the frame.
 
-<p style="text-align:center;"><img src="/assets/enabot_part2/video_frame.png" alt="video frame" style="height: 400px; width:350px;"/></p>
+<p style="text-align:center;"><img src="/assets/enabot_part2/p_frame.png" alt="p_frame" style="height: 55%; width:55%;"/></p>
 
 
 The first packet in the sequence always had the value `0x0141` at offset 0x65 (see image below). After a bunch of googling, some forum post talked about those bytes being the start of an h264 P-Frame. More googling and another forum or something talked about using ffmpeg to convert h264 data to a video. So we tried appending all the bytes that we assumed to be video data and ran it through ffmpeg to see if it would pop out a video file. That didn't work. Then we noticed that some of the sequence of video packets had the header `0x01d7`. Some more googling later, it turned out that was the start of a I-Frame. 
 
-![PFrame](/assets/enabot_part2/p_frame.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/video_frame.png" alt="video frame" style="height: 400px; width:350px;"/></p>
 
 From the little bit we read about h264 from doing this research it seems that I-Frames are the initial frame of a video and P-Frames then modify that frame until the next I-Frame is sent. Basically, the video has to start with an I-Frame or it won't have an initial base to modify and thus can't produce a video. So we wrote a parser to parse all the video packets, and appended their h264 data together while making sure the first frame of the video was a P-Frame. We did this based off of the `branch1` values in the packets.
 
@@ -506,25 +509,32 @@ For the standalone server, we basically want to see how far we can get pretendin
 
 The session looks like it starts successfully, but the actual things done during the session like movement, skills, etc, do not work. We think this is due to the session token changing each time as well as the sequence numbers of packets coming from the ebo drifting away from the ones we are sending as acknowledgement packets in the replay. 
 
+With this in mind we decided to go ahead and try to implement our own simple server/client. We say server/client because it kind of behaves as both. Our server sends a connection to a fixed port of a server hosted on the EBO. But instead of responding from the same port, the response comes from a random source port that is used for the remainder of the session. This is to facillitate multiple users connecting at once.
+
 Starting the session is fairly simple, we can mostly replay the connection packets from the beginning of the session to start a new session to our pc. One issue we had was the EBO disconnecting about 20 seconds after the session started.
 
-![No Hearbeat](/assets/enabot_part2/ebo_no_heartbeat.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/ebo_no_heartbeat.png" alt="Ebo no heartbeat" style="height: 75%; width:75%;"/></p>
 
 From looking at the normal session in wireshark we noticed a few changes that happen in the response the phone sends back to the EBO upon receiving a packet. 
 
-![Ebo heartbeat stay alive](/assets/enabot_part2/ebo_heartbeat_diagram.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/ebo_heartbeat_diagram.png" alt="Ebo heartbeat diagram" style="height: 550px; width:482px;"/></p>
 
 When we take these into account and resend the message then it will stay connected.
 
 ## Trying to send motor packets
 
-We had a lot of trouble with sending unique packets to the EBO via the server once connected. The EBO would move once when we sent a duplicated packet from a past capture. It would not move again upon sending the same packet, most likely due to the sequence number being the same. If we changed the sequence number in order to increment it, the EBO still wouldn't move! We played with the fields and no matter which field we changed, the EBO would no longer move. This was frustrating as it felt like we were vere so close. 
+Above we described the structure of the motor packets. We thought we understood the packet structures fairly well but we had a fair bit of trouble getting the EBO to actually move on demand from sending these packets via the server once connected. The EBO would only move once when we sent a duplicated packet from a past capture! It would not move again upon sending the same packet, most likely due to the sequence number being the same. If we changed the sequence number in order to increment it, the EBO still wouldn't move! We played with the fields and no matter which field we changed, the EBO would no longer move. This was frustrating as it felt like we were vere so close. 
 
-To solve this we needed to spend time understanding the layout of the different subsystems running on the EBO. The strategy was simple, we needed to find a spot that breaks for the "good" motor packet, but not for a "bad" motor packet, where something has been changed. Once we have this, we can follow the logic backwards until we find why it's not making it through. However, there are a lot of threads running from the FW_EBO_C process. IOTC_Thread is the active thread upon decoding a received packet. It was not at all as straightforward as you might expect to figure out where the handlers for a given function actually are.
+To solve this we needed to spend time understanding the layout of the different subsystems running on the EBO. The strategy was simple, we needed to find a spot that breaks for the "good" motor packet, but not for a "bad" motor packet, where something has been changed. Once we have this, we can follow the logic backwards until we find why it's not making it through. However, there are a lot of threads running from the FW_EBO_C process. UART_RecvProc is the active thread upon decoding a received packet. 
 
-Memory breakpoints were incredibly useful for finding where another thread interacted with the data seen written in one thread when it seems we have come to a dead end.
+Memory breakpoints were incredibly useful for finding where another thread interacted with the data seen written in one thread when it seems we have come to a dead end. Using this method we were able to determine the UART_RecvProc thread, which is responsible for reading RDT messages from the packet receive function. 
 
-Using
+The receive part of the thread acts as a state machine. One byte of data comes in at a time. It starts at stage 0, and then depending on the byte that comes in, the state changes accordingly. 
+
+<p style="text-align:center;"><img src="/assets/enabot_part2/uart_recv.png" alt="EBO Uart Recv" style="height: 550px; width:482px;"/></p>
+<p style="text-align:center;"><img src="/assets/enabot_part2/uart_recv2.png" alt="EBO Uart Recv2" style="height: 100%; width: 100%;"/></p>
+
+
 
 ## Starting the AVServer
 
@@ -540,7 +550,7 @@ The log prints after restarting FW_EBO_C were very useful for this whole process
 
 The messages above would appear when we connected from the phone, but when we connected from the ebo server, we didn't see that 3rd message. Looking in wireshark we could see that the next non heartbeat packet sent after our last one was a length 640 packet. 
 
-![640](/assets/enabot_part2/640.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/640.png" alt="640" style="height: 40%; width: 40%;"/></p>
 
 
 The bytes inside of this packet had some kind of ID string. And then a 32 byte value later down in the packet. After looking around the filesystem we found the matching string in /configs/token. The file had the matching ID string followed by another string. Our intuition led us to believe the 32 byte value in the packet was a SHA256 and that it was of the string that followed the ID. We were correct! The SHA256 matched of the string matched the 32 byte value found in the packet.
@@ -553,7 +563,7 @@ After starting the AVServer, we still weren't seeing any video packets.
 
 When we connected from the phone we saw that it would make a request to it's API server to validate a sent token. It was obvious the packet length 1118 was triggering this because it was close after the 640 and was the only packet long enough to hold an encoded JSON token.
 
-![1118](/assets/enabot_part2/1118.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/1118.png" alt="1118" style="height: 40%; width: 40%;"/></p>
 
 Looking at the branch value of the packet (0x9930), we were able to track it down in the decompilation. 
 
@@ -565,7 +575,7 @@ This means we know the key, and control the iv, and ciphertext, so we can comple
 
 In the packet snapshot above, we can see the IV and ciphertext as 2 of the fields we parsed in our wireshark dissector
 
-![1118lua](/assets/enabot_part2/1118_lua.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/1118_lua.png" alt="1118_lua" style="height: 40%; width: 40%;"/></p>
 
 If we send a length 1118 packet from an old pcap with a key that has expired, we get these log messages
 
