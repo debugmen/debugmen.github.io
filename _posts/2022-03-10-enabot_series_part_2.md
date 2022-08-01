@@ -449,7 +449,9 @@ Right
 ![right](/assets/enabot_part2/right.png)
 
 
-The first four bytes were for forward and backward movement. We still don't know what they first three bytes do, they didn't seem to affect anything, but the last byte controlled the direction. `0xbf` moved forward and `0x3f` moved backwards. The next 4 bytes followed the same pattern but left and right. These two separate "motors" can also be used in conjunction to make sharper turns. We implemenated all of these movements in our ebo server, hooked it up to WASD, and can move the ebo around as well as through the app! We even added in all the tricks and hooked them up to 1, 2, 3, and 4.
+For awhile thought that on the motors were controlled only by the last byte such as 0xbf or 0x3f since the other bytes would've been a massive int value. After looking back at it we realized that each group of 4 bytes is and IEEE float number and 0x3f and 0xbf were just chaning the value to positive or negative. For example the motor value for the "Right" image above is 0x3f97a68b which is really 1.18477 in float32. The value for the "Left" image is 0xbfd4a775 which is really -1.661360 in float32. 
+
+Using simple convertsions, we were able to actively add a slider to control the speed of the ebo in the ebo server GUI.
 
 
 ## Video Packets
@@ -656,6 +658,7 @@ The next step is finding a vulnerability that will let us connect to the ebo fro
 
 Next post we hope to cover the following.
 1. Emulation of the packet receive function with Qiling so that we can fuzz the packet input
+   * We have already begun working on this. We can emulate and fuzz from the packet receive function, but have to fix issues with the emulation such as it trying to access threads that don't exist.
 2. Identifying a vulnerablity from one of the crashes that could possibly be exploited
 3. Developing an exploit that will let us control memory and get a shell
 4. Using memory/shell access to manipulate the Ebo so that it will accept a connection from the ebo server without a proper key or ID number.
