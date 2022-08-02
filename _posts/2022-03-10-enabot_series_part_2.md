@@ -681,7 +681,7 @@ This means we know the key, and control the iv, and ciphertext, so we can comple
 
 In the packet snapshot above, we can see the IV and ciphertext as 2 of the fields we parsed in our wireshark dissector
 
-<p style="text-align:center;"><img src="/assets/enabot_part2/1118_lua.png" alt="1118_lua" style="height: 40%; width: 40%;"/></p>
+<p style="text-align:center;"><img src="/assets/enabot_part2/1118_lua.png" alt="1118_lua" style="height: 70%; width: 70%;"/></p>
 
 If we send a length 1118 packet from an old pcap with a key that has expired, we get these log messages
 
@@ -699,7 +699,6 @@ There were 2 final packets we knew we had to send because they would show up as 
 They both have hex command values, so we looked at wireshark and were easily able to identify which packets were triggering these log messages. They were the packets that were length 110. 
 
 ![handleiocmd](/assets/enabot_part2/handleiocmd.png)
-
 
 
 Notice bytes 0x63-0x62 are 0x32a. There is another packet almost identical to this one but it has 0x1ff as the two bytes, and then immediately after the video packets start appearing in the capture.
