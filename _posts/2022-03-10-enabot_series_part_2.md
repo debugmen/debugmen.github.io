@@ -681,7 +681,7 @@ This means we know the key, and control the iv, and ciphertext, so we can comple
 
 In the packet snapshot above, we can see the IV and ciphertext as 2 of the fields we parsed in our wireshark dissector
 
-<p style="text-align:center;"><img src="/assets/enabot_part2/1118_lua.png" alt="1118_lua" style="height: 40%; width: 40%;"/></p>
+<p style="text-align:center;"><img src="/assets/enabot_part2/1118_lua.png" alt="1118_lua" style="height: 70%; width: 70%;"/></p>
 
 If we send a length 1118 packet from an old pcap with a key that has expired, we get these log messages
 
