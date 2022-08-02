@@ -701,7 +701,6 @@ They both have hex command values, so we looked at wireshark and were easily abl
 ![handleiocmd](/assets/enabot_part2/handleiocmd.png)
 
 
-
 Notice bytes 0x63-0x62 are 0x32a. There is another packet almost identical to this one but it has 0x1ff as the two bytes, and then immediately after the video packets start appearing in the capture.
 
 ![videostarted](/assets/enabot_part2/video_started.png)
@@ -712,7 +711,7 @@ We were then able to implement the video packets recieved into our ebo server an
 
 ## Starting Speaker and Mic packets
 
-After starting the video, we also had trouble starting the microphone and speaker data. We knew what packets we had to send because they were the same 110 length IOCmdControl packets that we had to send to enable the video. However when we sent them, they weren't enabling. After some trial and error, we figured out we had to send a few packets before and after. We didn't look too much further into why they had to be sent, but part of the reason was so sequence numbers lined up.
+After starting the video, we also had trouble starting the microphone and speaker data. We knew what packets we had to send because they were the same 110 length "Handle_IOCTRL_Cmd" packets that we had to send to enable the video. However when we sent them, they weren't enabling. Again after some trial and error of sending more packets, we figured out we had to send a few packets before AND after the IO_CTRL_Cmd packets this time. Once we did that the audio data started rolling in and we knew we could send microphone packets to it.
 
 Code where it branches to enable the audio
 
@@ -722,13 +721,13 @@ Code where it branches to enable the microphone packets
 
 ![enable_mic](/assets/enabot_part2/mic_start.png)
 
-Log of us enabling audio and microphone
+Log of us enabling audio and microphone. When both the speaker and microphone are enabled, it enables "2wayTalk". The final message "no data of tutk audio recv(50)" is printed when the microhphone is enabled but no microphone packets are being received.
 
 ![audio_mic_start](/assets/enabot_part2/mic_audio_start.png)
 
 ## Speaker Packets
 
-We could tell that the packets coming from the Ebo that were length 370 were the speaker packets because they only showed up when we enabled the aduio in the app. 
+We could tell that the packets coming from the Ebo that were length 370 were the speaker packets because they only showed up when we enabled the speaker in the app. 
 
 <p style="text-align:center;"><img src="/assets/enabot_part2/audio_packet.png" alt="audio" style="height: 60%; width: 60%;"/></p>
 
@@ -740,7 +739,10 @@ If we concatenated all the bytes together from a packets capture from wireshark,
 
 The bandwidth of G711 is supposed to be 64Kbits/s and this lined up with what we saw. Every second, about 32 audio packets would come through. Each audio packet contained 0x100 bytes. 
 
-64Kbits/s / 8 bits/byte / 0x100 bytes/packet = 31.25 packets. This just verifies that what we were seeing makes sense.
+
+<p style="text-align:center;"><img src="/assets/enabot_part2/equation1.png" alt="mic_packets" style="height: 25%; width: 25%;background-color:white"/></p>
+
+This just verifies that what we were seeing makes sense.
 
 We want to playback the audio live as it comes through using pyaudio.
 
@@ -760,7 +762,8 @@ The mic packets were the same as the audio packets, but with a slightly modified
 
 Since more data is being sent in each packets, we know that the samples per packet was different. We can do
 
-8000samples/s / 0x1e0 samples/packet = 16.66 packets
+<p style="text-align:center;"><img src="/assets/enabot_part2/equation2.png" alt="mic_packets" style="height: 25%; width: 25%;background-color:white"/></p>
+
 
 Looking through wireshark it was safe to say that about 16-17 packets were sent every second for microphone data so this again lined up.
 
