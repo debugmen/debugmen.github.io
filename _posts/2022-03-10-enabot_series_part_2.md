@@ -128,7 +128,7 @@ int main(){
 
 ```
 
-After doing some debugging that can be read about in the separate post, we figured out that this was acurately unscrambling the data. We could see the unscrambled data before it was sent in GDB, and after unscrambling the scrambled packet in wireshark, it matched that initial unscrambled data. This meant the protocol this thing communicated on was just going to be tedious reverse. We have no strings indicating what each packet does, so we would have to match what the raw bytes in the packet were controlling in the firmware on the device.
+After doing some debugging that can be read about in the separate post, we figured out that this was acurately unscrambling the data. We could see the unscrambled data before it was sent in GDB, and after unscrambling the scrambled packet in wireshark, it matched that initial unscrambled data. This meant the protocol this thing communicated on was just going to be tedious to reverse. We have no strings indicating what each packet does, so we would have to match what the raw bytes in the packet were controlling in the firmware on the device. Also, if we want implement our own client, we will have to unscramble/scramble the data in realtime for receiving/responding to the device.
 
 # Function Renaming
 
@@ -166,7 +166,7 @@ The second renaming script we used was for functions that were called, and then 
 
 <p style="text-align:center;"><img src="/assets/enabot_part2/err_rename.png" alt="err_rename" style="height: 60%; width: 60%;"/></p>
 
-An example is in the image above. A function was called and a branch was taken based off the function's return value. If it wasn't 0, it printed the name of the function and and error message. We could use that print to rename the function called. It's renamed already because we had already run the script when the image was taken
+An example is in the image above. A function was called and a branch was taken based off the function's return value. If it wasn't 0, it printed the name of the function and and error message. We could use that print to rename the function called. It's renamed already because we had already run the script when the image was taken.
 
 The script below grabs all the error messages that are likely from a failed function call and then checks a few instructions back if there was a function call before it and renames it if there was. This one is much more unreliable and renamed a lot less functions. It would also list the strings that were likely function names but couldn't find a function call before there error string so they could be manually renamed.
 
@@ -283,7 +283,7 @@ Both these scripts combined allowed us to know the name of about 1600 function c
 
 Reversing what these packets were doing was very tedious, but we managed to do it. Every type of packet has its own components which track sequences numbers, branches in the code, tokens, etc. At this point we can debug the target and capture the network traffic in wireshark, but it's too overwhelming to look at the bytes without dissecting them.
 
-We chose to use the [kaitai language](https://kaitai.io/) to help us after finding [this project](https://github.com/joushx/kaitai-to-wireshark) which can convert a kaitai file to a wireshark dissector! Lain3d's [fork](https://github.com/lain3d/kaitai-to-wireshark) of the project supports conditional statements. This allowed us to actually browse the packet capture like this:
+We chose to use the [kaitai language](https://kaitai.io/) to help us after finding [this project](https://github.com/joushx/kaitai-to-wireshark) which can convert a kaitai file to a wireshark dissector! Lain3d's [fork](https://github.com/lain3d/kaitai-to-wireshark) of the project supports conditional statements, which are pretty necessary for this protocol. This allowed us to actually browse the packet capture like this:
 
 ![EboProto](/assets/enabot_part2/ebo_proto.png)
 
@@ -480,7 +480,7 @@ This will be covered more in depth in the ebo server section where we dicuss the
 
 The video packets were very easy to identify in wireshark. Video data is going to be alot larger than any other packet because it's a bunch of raw data being sent. So all the packets that were length 1122 stood out. Even moreso since all the data after the ebo procol stuff was just a bunch of random bytes. The only thing we didn't know was what format the data was in. Knowing nothing about video streaming, we just looked at the strings in the firmware. RTP, h265, and h264 all stood out and seemed to have to do with video stuff.
 
-Way too much effort was put into looking at the code and debugging trying to figure out where it encoded the video. The answer was just in the captured packets
+Way too much effort was put into looking at the code and debugging trying to figure out where it encoded the video. The answer was just in the captured packets.
 
 All the video packets came back to back so it was obvious to tell where the frame started, and then at the end there would still be a long packet, but it wouldnt be length 1122, and that was obviously the end of the frame.
 
@@ -531,7 +531,7 @@ Above we described the structure of the motor packets. We thought we understood 
 
 To solve this we needed to spend time understanding the layout of the different subsystems running on the EBO. The strategy was simple, we needed to find a spot that breaks for the "good" motor packet, but not for a "bad" motor packet, where something has been changed. Once we have this, we can follow the logic backwards until we find why it's not making it through. However, there are a lot of threads running from the FW_EBO_C process. UART_RecvProc is the active thread upon decoding a received packet. 
 
-Memory breakpoints were incredibly useful for finding where another thread interacted with the data seen written in one thread when it seems we have come to a dead end. Using this method we were able to determine the UART_RecvProc thread, which is responsible for reading RDT messages from the packet receive function. 
+Memory breakpoints were incredibly useful for finding where another thread interacted with the data seen written in one thread when it seems we have come to a dead end. Using this method we were able to determine the UART_RecvProc thread, which is responsible for reading RDT messages from the packet receive thread in a [pub-sub like manner.](https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern)
 
 The receive part of the thread acts as a state machine. One byte of data comes in at a time. It starts at stage 0, and then depending on the byte that comes in, the state changes accordingly. 
 
