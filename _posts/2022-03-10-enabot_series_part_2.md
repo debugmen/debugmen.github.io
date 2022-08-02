@@ -3,7 +3,7 @@ layout: post
 author: Etch Lain3d
 title:  "Enabot Hacking: Part 2"
 toc: true
-date:   2022-02-18 1:01:37 -0500
+date:   2022-08-1 1:01:37 -0500
 categories: Hardware-series
 ctf-category: PWN
 tags: etch  lain3d hardware IoT re enabot
@@ -18,9 +18,11 @@ tags: etch  lain3d hardware IoT re enabot
 
 - [Enabot Hacking: Part 2 -> Reverse Engineering](#enabot-hacking-part-2---reverse-engineering)
   - [Introduction](#introduction)
-  - [Contents](#contents)
+  - [Debugging the device](#debugging-the-device)
 - [Packet Analysis](#packet-analysis)
 - [Function Renaming](#function-renaming)
+- [Get all strings and turn to function names](#get-all-strings-and-turn-to-function-names)
+- [Get already named function](#get-already-named-function)
 - [Packet Reversing](#packet-reversing)
   - [Ebo Message Header Layer](#ebo-message-header-layer)
   - [Ebo Session Layer](#ebo-session-layer)
@@ -775,7 +777,8 @@ Unfortunately there is a loud whitenoise in the background, but we added mute bu
 
 ## Ebo Server In Action
 
-> Add video of it starting/moving around
+
+[![enabot](https://img.youtube.com/vi/LKxfrlR7m9s/0.jpg)](https://www.youtube.com/watch?v=LKxfrlR7m9s)
 
 # Conclusion
 
