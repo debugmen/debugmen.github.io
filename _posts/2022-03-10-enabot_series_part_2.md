@@ -47,7 +47,7 @@ tags: etch  lain3d hardware IoT re enabot
 
 
 ## Introduction
-Last post we covered the teardown and firmware extraction of the enabot. Initially in this post we had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as Etch did and we ended up getting a bit carried in a different direction instead 😅. In this post we describe how we emulate all the features of the original phone app, from our own client developed in python. We discuss the process of reverse engineering the protocol, and figuring out how to use the data the Enabot sends us. We think it will be much more exciting now for our next post on the vulnerabilities in the device. We hope you enjoy this post, the whole process ended up being a ton of fun and a lot more challenging than we initially expected 🥳.
+Last post we covered the teardown and firmware extraction of the enabot. Initially in this post we had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as Etch did and we ended up getting a bit carried away in a different direction instead 😅. In this post we describe how we emulate all the features of the original phone app, from our own client developed in python. We discuss the process of reverse engineering the protocol, and figuring out how to use the data the Enabot sends us. We think it will be much more exciting now for our next post on the vulnerabilities in the device. We hope you enjoy this post, the whole process ended up being a ton of fun and a lot more challenging than we initially expected 🥳.
 
 
 ## Debugging the device
@@ -358,11 +358,11 @@ Almost all packets after the original session creation are EboSession packets, r
 
 ## Ebo Session Creation Layer
 
+<p style="text-align:center;"><img src="/assets/enabot_part2/ebosessioncreate.png" alt="ebosessioncreate" style="height: 80%; width:80%;"/></p>
+
+The FromPhone and FromEBO layers are mostly the same, except the fixed4 is filled data differs in content and in length depending on the direction of the packet. Other than that it is always the same. The fixed data is more complex if it is coming from the phone, but is still unknown.
+
 <p style="text-align:center;"><img src="/assets/enabot_part2/ebo_new_connection.png" alt="ebo_new_connection" style="height: 35%; width:35%;"/></p>
-
-TODO: insert screenshot of EboSessionCreate code
-
-The FromPhone and FromEBO layers are mostly the same, except the fixed4 is filled data differs in content and in length depending on the direction of the packet. Other than that it is always the same. The data is more complex if it is coming from the phone, but is still unknown.
 
 ## Ebo Control Layer
 
@@ -806,3 +806,4 @@ Next post we hope to cover the following.
     * [Wireshark](https://www.wireshark.org/)
     * [Lain3d forked katitai-to-wireshark](https://github.com/lain3d/kaitai-to-wireshark)
     * [Kaitai Struct](https://kaitai.io/)
+    * [Scapy](https://github.com/secdev/scapy)
