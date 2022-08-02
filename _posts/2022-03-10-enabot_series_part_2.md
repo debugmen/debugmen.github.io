@@ -434,22 +434,22 @@ A capture was started, then the ebo was only moved forward, the capture was stop
 
 Then we compared the bytes of the packets and after a little testing using the ebo_server motor functionality and adjusting values in the motor packets slightly, it was easy to figure out what was happening. Keep your eyes focused on the lines of hex on offset 0x60 in the following packets and try and spot the patterns.
 
-Forward
 
+<center>Forward</center>
 
 <p style="text-align:center;"><img src="/assets/enabot_part2/forward.png" alt="forward" style="height: 55%; width:55%;"/></p>
 
-Backward
+<center>Backward</center>
 
 
 <p style="text-align:center;"><img src="/assets/enabot_part2/backward.png" alt="backward" style="height: 55%; width:55%;"/></p>
 
-Left
+<center>Left</center>
 
 
 <p style="text-align:center;"><img src="/assets/enabot_part2/left.png" alt="left" style="height: 55%; width:55%;"/></p>
 
-Right
+<center>Right</center>
 
 
 <p style="text-align:center;"><img src="/assets/enabot_part2/right.png" alt="right" style="height: 55%; width:55%;"/></p>
