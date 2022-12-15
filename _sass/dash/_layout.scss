@@ -136,7 +136,7 @@
     text-align: left;
     margin-bottom: 0.2em;
     @include themed() {
-       color: t('list-primary');
+       color: 0xffffff;
     }
   }
 
@@ -144,13 +144,16 @@
     text-align: left;
     margin-bottom: 0.2em;
     @include themed() {
-       color: t('list-primary');
+       color: 0xffffff;
     }
     list-style: none;
     margin-left: 0em;
 
     &:before {
       content: $icon-check;
+      @include themed() {
+        color: t('list-primary');
+      }
       @include font-awesome-icon;
       margin-left: 0;
       margin-right: 0.5em;
@@ -161,13 +164,16 @@
     text-align: left;
     margin-bottom: 0.2em;
     @include themed() {
-       color: t('list-primary');
+       color: 0xffffff;
     }
     list-style: none;
     margin-left: 0.5em;
 
     &:before {
       content: $icon-chevron-right;
+      @include themed() {
+        color: t('list-primary');
+      }
       @include font-awesome-icon;
       margin-right: 0.5em;
     }
@@ -178,13 +184,16 @@
     text-align: left;
     margin-bottom: 0.2em;
     @include themed() {
-       color: t('list-primary');
+       color: 0xffffff;
     }
     list-style: none;
     margin-left: 0;
 
     &:before {
       content: $icon-flask;
+      @include themed() {
+        color: t('list-primary');
+      }
       @include font-awesome-icon;
       margin-right: 0.5em;
     }

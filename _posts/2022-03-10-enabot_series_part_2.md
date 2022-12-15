@@ -3,7 +3,7 @@ layout: post
 author: Etch Lain3d
 title:  "Enabot Hacking: Part 2"
 toc: true
-date:   2022-02-18 1:01:37 -0500
+date:   2022-08-1 1:01:37 -0500
 categories: Hardware-series
 ctf-category: PWN
 tags: etch  lain3d hardware IoT re enabot
@@ -18,9 +18,11 @@ tags: etch  lain3d hardware IoT re enabot
 
 - [Enabot Hacking: Part 2 -> Reverse Engineering](#enabot-hacking-part-2---reverse-engineering)
   - [Introduction](#introduction)
-  - [Contents](#contents)
+  - [Debugging the device](#debugging-the-device)
 - [Packet Analysis](#packet-analysis)
 - [Function Renaming](#function-renaming)
+- [Get all strings and turn to function names](#get-all-strings-and-turn-to-function-names)
+- [Get already named function](#get-already-named-function)
 - [Packet Reversing](#packet-reversing)
   - [Ebo Message Header Layer](#ebo-message-header-layer)
   - [Ebo Session Layer](#ebo-session-layer)
@@ -47,7 +49,7 @@ tags: etch  lain3d hardware IoT re enabot
 
 
 ## Introduction
-Last post we covered the teardown and firmware extraction of the enabot. Initially in this post we had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as Etch did and we ended up getting a bit carried in a different direction instead 😅. In this post we describe how we emulate all the features of the original phone app, from our own client developed in python. We discuss the process of reverse engineering the protocol, and figuring out how to use the data the Enabot sends us. We think it will be much more exciting now for our next post on the vulnerabilities in the device. We hope you enjoy this post, the whole process ended up being a ton of fun and a lot more challenging than we initially expected 🥳.
+Last post we covered the teardown and firmware extraction of the enabot. Initially in this post we had hoped to look for vulnerabilities in the device and look for ways to exploit it. [Lain3d](https://twitter.com/lain3d) ended up working on this as much as Etch did and we ended up getting a bit carried away in a different direction instead 😅. In this post we describe how we emulate all the features of the original phone app, from our own client developed in python. We discuss the process of reverse engineering the protocol, and figuring out how to use the data the Enabot sends us. We think it will be much more exciting now for our next post on the vulnerabilities in the device. We hope you enjoy this post, the whole process ended up being a ton of fun and a lot more challenging than we initially expected 🥳.
 
 
 ## Debugging the device
@@ -65,7 +67,7 @@ With this in mind, we opened up wireshark and began looking at the stream of pac
 
 After looking at the data of some of the packets, we noticed this one.
 
-![charlie](/assets/enabot_part2/charlie_capture.png)
+<p style="text-align:center;"><img src="/assets/enabot_part2/charlie_capture.png" alt="charlie" style="height: 60%; width: 60%;"/></p>
 
 At the end of the packet it say "Charlie is". There is no way this is some coincidence of randomly generated data. There is probably some XOR encryption going on and those bytes were null bytes. We opened up the firmware in wireshark and checked if there were any strings with "Charlie is".
 
@@ -158,11 +160,11 @@ for ref in refs:
 print(f"Finished. Renamed: {rename_count} functions")
 ```
 
-<img src="/assets/enabot_part2/log_functions_renamed.png" alt="log_functions_renamed" style="height: 60%; width: 60%;"/>
+<p style="text-align:center;"><img src="/assets/enabot_part2/log_functions_renamed.png" alt="log_functions_renamed" style="height: 60%; width: 60%;"/></p>
 
 The second renaming script we used was for functions that were called, and then an error was printed if it returned an error code.
 
-<img src="/assets/enabot_part2/err_rename.png" alt="err_rename" style="height: 60%; width: 60%;"/>
+<p style="text-align:center;"><img src="/assets/enabot_part2/err_rename.png" alt="err_rename" style="height: 60%; width: 60%;"/></p>
 
 An example is in the image above. A function was called and a branch was taken based off the function's return value. If it wasn't 0, it printed the name of the function and and error message. We could use that print to rename the function called. It's renamed already because we had already run the script when the image was taken
 
@@ -274,7 +276,7 @@ print(f"Len of unnamed functions {len(unnamed_functions)}")
 </pre>
 </details>
 
-<img src="/assets/enabot_part2/err_rename_number.png" alt="err_rename_number" style="height: 60%; width: 60%;"/>
+<p style="text-align:center;"><img src="/assets/enabot_part2/err_rename_number.png" alt="err_rename_number" style="height: 60%; width: 60%;"/></p>
 
 Both these scripts combined allowed us to know the name of about 1600 function calls which was very nice to have when reversing.
 # Packet Reversing
@@ -322,9 +324,9 @@ Note: Since we don't actually know what each branch was when we started reversin
 
 Every packet going to or from the device started with this:
 
-<img src="/assets/enabot_part2/ebo_msg_hdr.png" alt="Ebo Msg Hdr" style="height: 50%; width: 50%;"/>
+<p style="text-align:center;"><img src="/assets/enabot_part2/ebo_msg_hdr.png" alt="Ebo Msg Hdr" style="height: 50%; width: 50%;"/></p>
 
-<img src="/assets/enabot_part2/ebo_packet_type.png" alt="Ebo Packet Type" style="height: 100px; width:320px;"/>
+<p style="text-align:center;"><img src="/assets/enabot_part2/ebo_packet_type.png" alt="Ebo Packet Type" style="height: 100px; width:320px;"/></p>
 
 
 1. The first two bytes are always `0x0402`
@@ -358,11 +360,11 @@ Almost all packets after the original session creation are EboSession packets, r
 
 ## Ebo Session Creation Layer
 
+<p style="text-align:center;"><img src="/assets/enabot_part2/ebosessioncreate.png" alt="ebosessioncreate" style="height: 80%; width:80%;"/></p>
+
+The FromPhone and FromEBO layers are mostly the same, except the fixed4 is filled data differs in content and in length depending on the direction of the packet. Other than that it is always the same. The fixed data is more complex if it is coming from the phone, but is still unknown.
+
 <p style="text-align:center;"><img src="/assets/enabot_part2/ebo_new_connection.png" alt="ebo_new_connection" style="height: 35%; width:35%;"/></p>
-
-TODO: insert screenshot of EboSessionCreate code
-
-The FromPhone and FromEBO layers are mostly the same, except the fixed4 is filled data differs in content and in length depending on the direction of the packet. Other than that it is always the same. The data is more complex if it is coming from the phone, but is still unknown.
 
 ## Ebo Control Layer
 
@@ -775,7 +777,8 @@ Unfortunately there is a loud whitenoise in the background, but we added mute bu
 
 ## Ebo Server In Action
 
-> Add video of it starting/moving around
+
+[![enabot](https://img.youtube.com/vi/LKxfrlR7m9s/0.jpg)](https://www.youtube.com/watch?v=LKxfrlR7m9s)
 
 # Conclusion
 
@@ -806,3 +809,4 @@ Next post we hope to cover the following.
     * [Wireshark](https://www.wireshark.org/)
     * [Lain3d forked katitai-to-wireshark](https://github.com/lain3d/kaitai-to-wireshark)
     * [Kaitai Struct](https://kaitai.io/)
+    * [Scapy](https://github.com/secdev/scapy)
