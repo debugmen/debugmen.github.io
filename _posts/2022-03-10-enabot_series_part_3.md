@@ -3,7 +3,7 @@ layout: post
 author: Etch Lain3d
 title:  "Enabot Hacking: Part 3"
 toc: true
-date:   2023-06-18 1:01:37 -0500 
+date:   2023-02-05 1:01:37 -0500 
 categories: Hardware-series
 ctf-category: PWN
 tags: etch  lain3d hardware IoT re enabot
@@ -17,10 +17,132 @@ In the previous post we went over reversing the Ebo's protocol and creating our 
 
 ## Our Initial Plan
 
-Right off the bat we were interested in using fuzzing as a means of finding vulnerabilities. We figured if we could just throw thousands of packets at it, it would eventually break and we'd have a way in. Qiling is an open emulator that supports arm and can emulated linux syscalls. It was perfect for the target we were looking at. We also figured we could fuzz on the actual device at the same time. Radamsa is also an open source fuzzer, but it's really dumb. Even though it randomly changes input, we knew we would have to give it some guidance on the branches it should take. Both of these methods will be explained in depth.
+Right off the bat we were interested in using fuzzing as a means of finding vulnerabilities. We figured if we could just throw thousands of packets at it, it would eventually break and we'd have a way in. Qiling is an open emulator that supports arm and can emulated linux syscalls. It was perfect for the target we were looking at. We also figured we could fuzz on the actual device at the same time using Radamsa. Radamsa is also an open source fuzzer, but it's really dumb. Even though it randomly changes input, we knew we would have to give it some guidance on the branches it should take. Both of these methods will be explained in depth.
+
+## Mavlink packets
+
+In our last post we described a crc check that was preventing us from using our server to move the Enabot. We knew that there were several other types of commands we should be able to play with, such as changing volume, toggling the camera, and even editing the on device config with new values. However, when we tried to use these commands, nothing happened. We discovered that the crc function was incomplete and would result in incorrect crc for the other message types. We added the missing constants and it now works for the other types as well.
+
+```c
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <byteswap.h>
+#include "defs.h"
+
+/* 
+From fz_uart::ThreadReadTutkToUart 
+*/
+
+typedef uint32_t u32;
+typedef uint16_t u16;
+typedef uint8_t u8;
+
+u8 input[] = {0xfe,0x11,0x00,0x0c,0x00,0xca,0x00,0x00,0x00,0x00,0x00,0x00,0x40,0xbe,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x15};
+u8 cmds[] = {0xf9, 0x7, 0x7c, 0xe2, 0x2d, 0xd6, 0xd6, 0xf6, 0xd4, 0xd4, 0x3b, 0x6e, 0xc3, 0x29, 0x8c, 0x5b, 0x25, 0x8d, 0x73, 0x1d, 0x46, 0x64, 0xea, 0x8, 0xe6, 0xf2, 0x9, 0xdd, 0x88, 0x3f, 0x7f, 0x4f, 0x88, 0x86, 0x51, 0xcd, 0x14, 0xb9, 0x3, 0x88, 0x46, 0x29, 0x88, 0x9c, 0xd5, 0x3a, 0x5f, 0x21, 0xf6, 0x0, 0x31, 0x82, 0xe4, 0x5b, 0xbd, 0x8b, 0x96, 0x61, 0x16, 0x37, 0xd0, 0xd3, 0xd4, 0xe9, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x85, 0x49, 0x2b, 0xaa, 0xc2, 0x4e, 0x39, 0xb2, 0x0, 0x2a, 0xee, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xf, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1d, 0x42, 0x2f, 0x98, 0xb3, 0x4a, 0x5d, 0x64, 0x51, 0xdd, 0x6c, 0xca, 0x68, 0xf1, 0x3a, 0xb2, 0x5d, 0xb6, 0x9c, 0xf, 0x6, 0xf0, 0xdc, 0xc, 0x74, 0x16, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x5a, 0x65, 0x4c, 0xfa, 0x58, 0x54, 0xd0, 0xc3, 0x17, 0x30, 0x0, 0x0, 0x0, 0x30, 0x0, 0x0, 0x85, 0x10, 0x0, 0xb9, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xc4, 0x2c, 0xd3, 0x22, 0xe8, 0x2a, 0x13, 0xde, 0x56, 0x44, 0x64, 0x41, 0xdf, 0x75, 0x79, 0x9e, 0x72, 0x4d, 0x54, 0xe2, 0x9, 0x20, 0xb6, 0x4e, 0xed, 0x97, 0x64, 0x9f, 0xa4, 0xd0, 0x34, 0xd9, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x9, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
 
 
-## Emulated Fuzzing
+u32 calc_crc(u8* buf) {
+    u32 tutk_type = 1;
+    u8 mem_0;
+    u8 mem_1;
+    u8 mem_2;
+    u8 mem_3;
+    u32 local_mem0;
+    u16 motor_xor0;
+    u16 motor_xor1;
+    u32 motor_xor2;
+    u8 motor_xor3;
+    u8 c_2 = 0;
+    u32 v4;
+    u32 v5;
+    while(1) {
+        u8 c = *buf;
+        buf = buf+1;
+        switch(tutk_type) {
+            case 0:
+            case 1:
+                if (c == 0xfe) {
+                    tutk_type = 2;
+                    mem_0 = 0;
+                    motor_xor0 = 0xffff;
+                }
+                goto cont;
+            case 2:
+                motor_xor2 = motor_xor0;
+                mem_0 = c;
+                mem_2 = 0;
+                motor_xor3 = c ^ motor_xor0;
+                tutk_type = 4;
+                goto in_s5_lower;
+            case 3:
+                motor_xor2 = motor_xor0;
+                local_mem0 = 5;
+                goto in_s5;
+            case 4:
+                motor_xor2 = motor_xor0;
+                local_mem0 = 3;
+                mem_3 = c;
+                goto in_s5;
+            case 5:
+                motor_xor2 = motor_xor0;
+                local_mem0 = 6;
+            in_s5:
+                tutk_type = local_mem0;
+                motor_xor3 = c ^ motor_xor2;
+            in_s5_lower:
+                motor_xor0 = ((motor_xor2 >> 8) ^ ((u8)(motor_xor3 ^ (16 * motor_xor3)) >> 4) | ((u8)(motor_xor3 ^ (16 * motor_xor3)) << 8)) ^ (8 * (u8)(motor_xor3 ^ (16 * motor_xor3)));
+                goto cont;
+            case 6:
+                c_2 = c;
+                motor_xor1 = c;
+                motor_xor0 = (HIBYTE(motor_xor0) ^ ((u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))) >> 4) | ((u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))) << 8)) ^ (8 * (u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))));
+                if (!mem_0) {
+                    goto s7_lower;
+                }
+                tutk_type = 7;
+                goto cont;
+            case 7:;
+                unsigned char v7 = mem_2;
+                u32 v8 = (u8)(v7+1);
+                mem_2 = v8;
+                motor_xor0 = (HIBYTE(motor_xor0) ^ ((u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))) >> 4) | ((u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))) << 8)) ^ (8 * (u8)(c ^ motor_xor0 ^ (16 * (c ^ motor_xor0))));
+                if ( (u8)mem_0 == v8 ) {
+            s7_lower:
+                    tutk_type = 8;
+                }
+                goto cont;
+            case 8:
+                v4 = (u8)(motor_xor0 ^ cmds[c_2] ^ (16 * (motor_xor0 ^ cmds[c_2])));
+                v5 = (HIBYTE(motor_xor0) ^ (v4 >> 4) | (v4 << 8)) ^ (8 * v4);
+                
+                v5 = bswap_16(v5);
+                return v5;
+        }
+cont:
+        mem_1 = 0;
+        continue;
+    }
+}
+
+int main() {
+    calc_crc(input);
+}
+```
+
+Now that we had this working we can fuzz from the beginning of the ebo protocol or specificly target the mavlink messages. We ended up doing both in our quest to find vulnerabilities.
+
+## Emulated Snapshot Fuzzing
+
+Full system emulation is tedious. Because we already know a lot about the system, it makes more sense to get the most bang for our buck utilizing that. We played around with the idea of first capturing the state of the FW_EBO_C program right as it enters the function that parses the received packets and fuzzing the chain of logic that each packet leads us down.
+
+To start we simply used gef's built in unicorn-emulate again, as they already had some logic for reading and writing all the mapped memory to files. There were a few issues in the script that it generates, such as registers not being set or thumb mode not being configured correctly. We ended up making our own snapshot command based off the old one and used that https://github.com/lain3d/gef-extras/commit/9c145d7d55606dcdd5493b90d2c4d4192c1d4e1b . 
+
+Once we had the memory mapped we had new problems when trying to run our emulation. With malloc, we ran into issues with it trying to do stuff with pthread functions, like pthread_mutex_lock. We are only emulating one thread so this would effectively stall our program. So we ended up using hooks to bypass these.
+
+We started to find crashes that would restart the device, unfortunately they were not exploitable. 
+
+- TODO: add more details about specific crashes???
 
 ## Radamsa Fuzzing
 
@@ -37,6 +159,8 @@ We then set it up so it sent the initial connection packet so that it knew a dev
 The image above is the function that will take the packet after it has been unscrambled, and branch into these different section of code based on the initial branch value. So we would generate a completely random fuzzed packet, modify the branch value, adjust the size, and send the packet
 
 ## Static Analysis
+
+- it was really just getting the mavlink packets to work. other than that we did the bounds checking for what is the max length of a packet?
 
 ## Vulnerabilites
 
