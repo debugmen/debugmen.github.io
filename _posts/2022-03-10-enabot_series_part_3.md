@@ -155,15 +155,38 @@ Now that we had this working we can fuzz from the beginning of the ebo protocol 
 
 ## Emulated Snapshot Fuzzing
 
-Full system emulation is tedious. Because we already know a lot about the system, it makes more sense to get the most bang for our buck utilizing that. We played around with the idea of first capturing the state of the FW_EBO_C program right as it enters the function that parses the received packets and fuzzing the chain of logic that each packet leads us down.
+Full system emulation is tedious. We know a lot about how the protocol it uses to parse the packet data, but we haven't really put a lot of time into researching the actual system at the hardware level. Therefore, it makes more sense to get the most bang for our buck with our existing knowledge so we can find bugs!
 
-To start we simply used gef's built in unicorn-emulate again, as they already had some logic for reading and writing all the mapped memory to files. There were a few issues in the script that it generates, such as registers not being set or thumb mode not being configured correctly. We ended up making our own snapshot command based off the old one and used that https://github.com/lain3d/gef-extras/commit/9c145d7d55606dcdd5493b90d2c4d4192c1d4e1b . 
+We want to fuzz the system without spending even more time reverse engineering, so we started playing around with the idea of first capturing the state of the FW_EBO_C program right as it enters the function that parses the received packets and fuzzing the chain of logic that each packet leads us down.
 
-Once we had the memory mapped we had new problems when trying to run our emulation. With malloc, we ran into issues with it trying to do stuff with pthread functions, like pthread_mutex_lock. We are only emulating one thread so this would effectively stall our program. So we ended up using hooks to bypass these.
+To do this, we need a way to capture the state of the system. We start with the easiest state to capture, the registers and RAM. 
 
-We started to find crashes that would restart the device, unfortunately they were not exploitable. 
+To get these we simply used GEF's built in unicorn-emulate, as they already had some logic for reading and writing all the mapped memory to files. There were a few issues in the script that it generates, such as registers not being set or thumb mode not being configured correctly. We ended up making our own snapshot command based off the old one and used that. This is [here](https://github.com/lain3d/gef-extras/commit/9c145d7d55606dcdd5493b90d2c4d4192c1d4e1b). Its hacked for ARM.
 
-- TODO: add more details about specific crashes???
+Once we had the memory dump and registers, we needed to use an emulator. For this we decided to use [qiling](https://github.com/qilingframework/qiling). We liked that it would at least try to emulate some of the syscalls for us that we were bound to hit during this experiment. 
+
+So once we load the state into qiling and run the emulation to the end of the packet parsing function everything should just work right? Absolutely not! The first problem we were running into were functions that  With malloc, we ran into issues with it trying to do stuff with pthread functions, like pthread_mutex_lock. It would try to read from an address at a very high address that wasn't mapped, like `0xfffffbf0`. We weren't sure what this was doing, so we ended up using hooks to bypass these. So we ended up using unicorn's simple heap implementation instead inside of our hooks. This has disadvantages obviously, like we are no longer using the real malloc implementation, but we just kept going forward.
+
+> TODO: insert image of hooks
+
+You can also see that because we are using qiling, syscalls like gettimeofday are being handled nicely. However, for things like open fd's at the time of the snapshot, either through files on disk or sockets, they won't be emulated correctly. This is the main reason why we take our snapshot at the beginning of the function that decodes the unscrambled packet: we hope that we can find problems in the logic before the emulation diverges from the real thing. We know it's not going to be perfect, but with it we get the main advantages of emulating when it comes to this type of work: very easy to get coverage / traces. 
+
+With qiling, getting coverage for an emulation can be done in two lines of code:
+
+```python
+with cov_utils.collect_coverage(ql, "drcov", f"coverage/{os.path.basename(args.data)}.cov"):
+    ql.run(begin=SNAPSHOT_START, end=SNAPSHOT_END[0])
+```
+
+Traces weren't free, but Etch made a tenet plugin for qiling and also ported tenet for ARM. The plugin has since been merged but the pr is [here](https://github.com/qilingframework/qiling/pull/1205). We hacked tenet to work for ARM and that is [here](https://github.com/lain3d/tenet).
+
+Now we can collect traces from a given emulation like so:
+
+```python
+with trace_utils.collect_trace(ql, "tenet", f"trace3/{args.trace_name}"):
+    ql.run(begin=SNAPSHOT_START, end=SNAPSHOT_END[0])
+```
+
 
 ## Radamsa Fuzzing
 
