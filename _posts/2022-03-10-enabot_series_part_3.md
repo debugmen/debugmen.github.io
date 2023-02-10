@@ -11,23 +11,39 @@ tags: etch  lain3d hardware IoT re enabot
 
 # Enabot Hacking: Part 3 -> Vulnerability and Exploitation
 
-## Introduction
+- [Enabot Hacking: Part 3 -\> Vulnerability and Exploitation](#enabot-hacking-part-3---vulnerability-and-exploitation)
+- [Introduction](#introduction)
+- [Our Initial Plan](#our-initial-plan)
+- [Mavlink packets](#mavlink-packets)
+- [Fuzzing](#fuzzing)
+  - [Emulated Snapshot Fuzzing](#emulated-snapshot-fuzzing)
+  - [Radamsa Fuzzing](#radamsa-fuzzing)
+- [Static Analysis](#static-analysis)
+- [Vulnerabilites](#vulnerabilites)
+- [Exploitation](#exploitation)
+- [Submitting a CVE](#submitting-a-cve)
+- [Final Thoughts](#final-thoughts)
+- [Tools](#tools)
+
+# Introduction
 
 In the previous post we went over reversing the Ebo's protocol and creating our own Ebo Server so that we could interact with the device from our own computer. This post will dive into the vulnerabilites we found on the device, and the ways we were able to exploit them. This device was surprisingly more locked down than we thought, at least preauth. We used various different methods to search for vulnerabilites and each helped along the way.
 
-## Our Initial Plan
+# Our Initial Plan
 
 Right off the bat we were interested in using fuzzing as a means of finding vulnerabilities. We figured if we could just throw thousands of packets at it, it would eventually break and we'd have a way in. Qiling is an open emulator that supports arm and can emulated linux syscalls. It was perfect for the target we were looking at. We also figured we could fuzz on the actual device at the same time using Radamsa. Radamsa is also an open source fuzzer, but it's really dumb. Even though it randomly changes input, we knew we would have to give it some guidance on the branches it should take. Both of these methods will be explained in depth.
 
-## Mavlink packets
+# Mavlink packets
 
 In our last post we described a crc check that was preventing us from using our server to move the Enabot. We knew that there were several other types of commands we should be able to play with, such as changing volume, toggling the camera, and even editing the on device config with new values. However, when we tried to use these commands, nothing happened. We discovered that the crc function was incomplete and would result in incorrect crc for the other message types. We added the missing constants and it now works for the other types as well.
 
-```c
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <byteswap.h>
+<details>
+<summary>Mavlink Packets Code</summary>
+<pre>
+#include "stdint.h"
+#include "stdio.h"
+#include "stdlib.h"
+#include "byteswap.h"
 #include "defs.h"
 
 /* 
@@ -128,7 +144,12 @@ cont:
 int main() {
     calc_crc(input);
 }
-```
+</pre>
+</details>
+
+
+
+# Fuzzing
 
 Now that we had this working we can fuzz from the beginning of the ebo protocol or specificly target the mavlink messages. We ended up doing both in our quest to find vulnerabilities.
 
@@ -154,27 +175,29 @@ Our initial fuzzing was setup to just spam the device with random data and see i
 
 We then set it up so it sent the initial connection packet so that it knew a device was connected, even if it wasn't authenticated for the server. Then we sent fuzzed packets while the device was in this state, but we modified the specific branch value in the handle decrypted packet so that it would hit as many different branches in that function as possible, along with it hitting even more since it was connected.
 
-![branch_values](/assets/enabot_part3/branch_values.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/branch_values.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
 
 The image above is the function that will take the packet after it has been unscrambled, and branch into these different section of code based on the initial branch value. So we would generate a completely random fuzzed packet, modify the branch value, adjust the size, and send the packet
 
-## Static Analysis
+# Static Analysis
 
 - it was really just getting the mavlink packets to work. other than that we did the bounds checking for what is the max length of a packet?
 
-## Vulnerabilites
+# Vulnerabilites
 
 After fuzzing and finding a few unexploitable crashes. We noticed something interesting on the device that never came through in the log messages. The ```ebo.cfg``` file had been modified with a bunch of random data in it. Normally it should look like this
 
-![orig_ebo_cfg](/assets/enabot_part3/orig_ebo_cfg.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/orig_ebo_cfg.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
 
 However, after fuzzing we started seeing random shit in the config. Literally.
 
-![random_shit](/assets/enabot_part3/random_shit.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/random_shit.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
+
 
 Somehow we were completely overwriting and creating our own values in the ebo.cfg file. We immediately thought that if we could overwrite the ```server``` parameters in the config, we could redirect any requests to the normal server back to our own malicius server. After some searching through the code, one of features that used the values in the config was the firmware upgrade.
 
-![upgrade_from_config](/assets/enabot_part3/upgrade_from_config.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/upgrade_from_config.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
+
 
 We can see that it's grabbing the ```server-domain``` parameter from the config as part of the handleUpgradeRequest function. This was perfect because if we could overwrite the config to point to own own server, we could also trigger an upgrade from one of the mavlink commands that we mentioned earlier in the fuzzing sections. This would allow us to send alot more input that it doesn't expect, and install a rootkit onto the device.
 
@@ -182,7 +205,7 @@ First, we had to figure out how to successfully overwrite the config. After some
 
 config_header-header_parameter. So say you wanted to add a time parameter to the video header, you would send video-time. Then it would grab a value from later down in the packet to put at the value for the paramter. Here is an example of them setting the timezone config. 
 
-![timezone_modify](/assets/enabot_part3/timezone_modify.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/timezone_modify.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
 
 We see that they use the time header and the timezone paramter to select what they want to change in the config though.They use the branch value 0xe2, but that was only allowing them to modify an already existing value with an integer, which wasn't going to work for us because we had to use a string. With the branch value 0xe5, we could add new config values, but not modify existing ones, and it still didn't let us send strings. We were able to get around this using newlines. We also found out that if we tried to add a duplicate entry to an already existing parameter, it would be placed below the original one, and wouldn't get used. We were able to get around all of this using newlines though.
 
@@ -200,36 +223,33 @@ This also lets us replace the https protocl with http since that changes the pat
 
 After sending these packets, the config now looks like this.
 
-![modified_server](/assets/enabot_part3/modified_server.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/modified_server.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
+
 
 Now for some reason even after sending an update it still uses the original config. However, after a reboot the config must get parsed and it saves the new values and removes the original ones.
 
-![post_reboot_config](/assets/enabot_part3/post_reboot_config.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/post_reboot_config.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
+
 
 Conviently one of the mavlink commands also can trigger a soft reboot where the device reboots silently. So we can modify the config, reboot the device, and when we trigger and update, it'll reach back to our server. At the time of writing this, we just realized they misspelled "protocol" in the config. It must default to use the port when they normally update. We could still overwrite it, but it isn't necessary as we still are getting http requests. In the next section we'll go over how we were able to exploit the device once it reached back to our server
 
 
 
 
-## Exploitation
+# Exploitation
 
 To truly exploit this device, we also needed to get a shell on it. This way we could get a shell, steal the saved tokens paired with the user's phone for connecting to the remote server, install a rootkit, and then place the token back on the device without there being a trace of what happened. This way we could have a rootkit on the device where we could access it at anytime, be able to use the ebo server, etc. and the owner could still use the ebo from their phone.
 
 We'll go over the path of an upgrade to help better understand how we were able to exploit this vulnerability. First when we triggered an upgrade using the mavlink branch value ```0xcd```, we hit this section of the code where it enters handleUartUpgradeRequest.
 
-![handle_uart_request_upgrade](/assets/enabot_part3/handle_uart_upgrade_request.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/handle_uart_upgrade_request.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
 
 It would enter that function, and we would see all the config prints for the upgrade in the logs, and then it reached the end of that function it would create an ```FZ_Upgrade_Thread```
 
-![fz_upgrade_thread](/assets/enabot_part3/fz_upgrade_thread.png)
+Once inside of this function, it would continue down and create 2 more threads. The one we care about is the ```FZ_FileDownload_Thread```. This is the thread that we perform our initial exploit. Inside of this thread we hit the ```Getresource_domain``` function. This function allows he device reaches out to the server to see what url it should download the upgrade file from.
 
-Once inside of this function, it would continue down and create 2 more threads. The one we care about is the ```FZ_FileDownload_Thread```. This is the thread that we perform our initial exploit.
+<p style="text-align:center;"><img src="/assets/enabot_part3/first_request.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
 
-![fz_filedownload_thread](/assets/enabot_part3/fz_filedownload_thread.png)
-
-Inside of this thread we hit the ```Getresource_domain``` function. This function allows he device reaches out to the server to see what url it should download the upgrade file from.
-
-![request1](/assets/enabot_part3/first_request.png)
 
 It sends a POST request to the server and in the response it checks for ```HTTP/1.1 302 Found```. After that it checks for ```Location: ```. It will then strncpy all the data after location up until it sees a newline character. We tested this an were actually able to [overwrite the return address](https://www.ired.team/offensive-security/code-injection-process-injection/binary-exploitation/stack-based-buffer-overflow) to the function call above since the destination in the ```strncpy``` is a pointer to the stack from function above. We weren't able to exploit it because we didn't have a leak and the device has aslr enabled. If we had a leak we could've created a [ROPchain](https://www.ired.team/offensive-security/code-injection-process-injection/binary-exploitation/rop-chaining-return-oriented-programming) to spawn a netcat listener  We also didn't need to cause we had a vision for where we could perform a command injection.
 
@@ -237,7 +257,8 @@ Instead we just respond that the ```Location:``` it should download the firmware
 
 We return from that function and then hit the ```FZ_Get_Remote_File``` in the ```Fz_FileDownload_Thread``` function seen from above.
 
-![get_remote_update_file](/assets/enabot_part3/get_remote_update_file.png)
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/get_remote_update_file.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
 
 The reason we didn't dive to deep into the buffer overflow is because we had our eye on the possible command injection in this function. If we could pass a ridiculous filename to the tar command, we could start a netcat reverse shell. If the filename were something like the following, it would work
 
@@ -256,24 +277,26 @@ Then after we close the netcat connection, it would hit the next semicolon indic
 
 Regardless of if the tar or ls commands failed, the netcat listener would still open, but it's nice to make everything execute cleanly when possible. To get to this command injection we first had to enter the ```GetFile_updatefile``` function.
 
+<p style="text-align:center;"><img src="/assets/enabot_part3/update_file.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
 
-![update_file](/assets/enabot_part3/update_file.png)
 
 It first makes sure that the url contains ```https://```. Then it reads the url until the first `/` character. It then uses that URL and makes a GET request to it.
 
-![get_response](/assets/enabot_part3/get_response.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/get_response.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
+
 
 In the response from our server it checks for 
-```HTTP/1.1 200 OK```
-```Content-Length: ```
-```md5_token=```
-```filename=```
-```.tar``` or ```.zip```
-```\r\n\r\n```
+`HTTP/1.1 200 OK`
+`Content-Length: `
+`md5_token=`
+`filename=`
+`.tar` or `.zip`
+and `\r\n\r\n`
 
 Once it validates the response contains all these paramters, it will open a file with the given filename for writing and then keep receiving the data of the upgrade file in tcp packets. Once it stops receiving data or doesn't receive data it will close the file, and that's when we noticed a different spot for command injection.
 
-![command_injection](/assets/enabot_part3/command_injection.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/command_injection.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
+
 
 To validate the file was transferred successfully, it calculates the md5sum and validates it matches the ```md5_token=``` value we sent in the GET response.
 
@@ -291,7 +314,8 @@ When an upgrade fails, the device reboots and still has the original firmware on
 
 We did a bit more reversing and figured out what happens when it does a firmware upgrade. When it receives the tar file, it untars it and it contains a bunch of squash filesystems. Each filesystem is then reprogrammed onto a mtd block in /dev. We defined a custom struct in binary ninja and it shows nicely which mtd block lines up with which filesystem.
 
-![squashfs](/assets/enabot_part3/squashfs.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/squashfs.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
+
 
 Since we want to modify the rcS file, we only care about the rootfs filesystem since it will contain that. Looking at the structures, we see that we'd have to write to ```/dev/mtd2``` We can now add an extra line into the rcS, and squashfs the filesystem back into a format we can program onto the mtd block.
 
@@ -344,7 +368,7 @@ We can see that 1 inode was added since we added a file, and the size grew by 26
 
 Now we can write some C code to reprogram the mtd block and install our rootkit. Shoutouts to stackoverflow for most of the code.
 
-```C
+```c
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -443,11 +467,12 @@ Then we'll transfer the rootkit and the compiled binary to install it to ```/var
 
 When we run it, we can see it prints everything and installs the rookit.
 
-![install_rootkit](/assets/enabot_part3/install_rootkit.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/install_rootkit.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
+
 
 Now we can reboot the device and hope it works! We wait until its fully booted and listen for incoming netcat connections on port 1234.
 
-![netcat_success](/assets/enabot_part3/netcat_success.png)
+<p style="text-align:center;"><img src="/assets/enabot_part3/netcat_success.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
 
 And it worked! We connected and ran ```ps -A | grep hello``` to show that the hello script is running in the background. We were happy it worked too cause if it didn't it may have been bricked till we took the chip off and reprogrammed it manually.
 
@@ -455,9 +480,19 @@ From here on out, as long as the ebo is on, it will be attempting to connect to 
 
 Now we can add this to the rest of the exploit after we get our shell, and it will be fully automated from beginning to end.
 
+
+# Full Exploit Chain
+
+Stealing the TUTK ID using arp spoofing
+
+
+
 # Submitting a CVE
 
-Talk about submitting CVE and them talking with the vendor
+We contacted the vendor and disclosed the vulnerability with them in an email. Multiple emails actually. And we never got a response. This vulnerability isn't severe enough for us not to disclose it to the public, it's only over LAN after all and an arp spoof is also required to get the tutk id on top of that.
+
+We will be submitting a CVE for the vulnerability, and hopefully a fix can be implemented if more attention is drawn to it.
+
 
 # Final Thoughts
 
@@ -469,7 +504,6 @@ The next vulnerability we find we would like it to not require the TUTK ID, or i
 Show paths of it looking for strings
 Show the command injection path
 
-## Rootkits
 
 # Tools
 
