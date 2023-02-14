@@ -183,10 +183,33 @@ Traces weren't free, but Etch made a tenet plugin for qiling and also ported ten
 Now we can collect traces from a given emulation like so:
 
 ```python
-with trace_utils.collect_trace(ql, "tenet", f"trace3/{args.trace_name}"):
+with trace_utils.collect_trace(ql, "tenet", f"trace/{args.trace_name}"):
     ql.run(begin=SNAPSHOT_START, end=SNAPSHOT_END[0])
 ```
 
+The coverage was very useful for being able to tell what we were and weren't hitting in the packet parsing function. For example, when we were first using this technique we were only covering 30.96% of the function:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/coverage_initial.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
+
+We looked at what was covered and what was not and changed the fuzzer as necessary to reach more places where we easily could. 
+
+Things that we could easily fix were things like the minimum length of our fuzz data being too high, or missing message types:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/examine_coverage.png" alt="ebocontrol" style="height: 60%; width:60%;"/></p>
+
+After fixing these we raised the coverage to 42.91% (around same amount of time fuzzing)
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/fuzzing_coverage.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
+
+We could see that the previous area was now getting hit:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/examine_coverage2.png" alt="ebocontrol" style="height: 60%; width:60%;"/></p>
+
+So why aren't we covering closer to 100% you might ask? Well, yes, there are probably more improvements we could have made. But, more so, the reason is scope. The Ebo allows us to start a new connection with only the serial number. We were able to get that through a trick we will show later in this post, but there are other things that require more credentials to be able to access. This being the AV, or audio-vidio server. To turn that on we need a token in the format XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX as well as another secret ASCII string stored on the device. For this reason, we are fuzzing without turning on the AV server. This causes our coverage to go down because of checks in the parsing logic that the AV server is actually enabled before proceeding to parse the AV logic. 
+
+Other things may include places that can only be reached through multiple packets. Here we are only getting the coverage from a single packet. But, if to get to B another prerequisite packet A needs to be sent, we will never hit B. This could be something we could modify the fuzzer to do, but have not.
+
+After we improved our coverage, this approach did eventually yield actual packets that would crash the device. But, while we were working on this we made a simpler Radamsa fuzzer that found the same crash first!
 
 ## Radamsa Fuzzing
 
@@ -202,9 +225,50 @@ We then set it up so it sent the initial connection packet so that it knew a dev
 
 The image above is the function that will take the packet after it has been unscrambled, and branch into these different section of code based on the initial branch value. So we would generate a completely random fuzzed packet, modify the branch value, adjust the size, and send the packet
 
-# Static Analysis
+# Static Analysis on the crash
 
-- it was really just getting the mavlink packets to work. other than that we did the bounds checking for what is the max length of a packet?
+Tenet was nice for analyzing the crash because we could easily see the register values throughout the crash trace:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/tenet_trace.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
+
+We could follow the crash into a libc function inet_ntop:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis2.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
+
+We can then load up libc in IDA and go to the end of the trace:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis3.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
+
+Looks like the trace ended one instruction before the crash, because the crash is at the next `ldrb` instruction. However we can get a clue by using tenet's "go to previous execution" on that instruction and keeping the current value of r6, `0xb2d63004` in mind.
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis4.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
+
+We see that r6 is `0xb2d62ff7`. When we look at the mapped regions, it looks like we are reaching the near of the area:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis5.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
+
+We could have figured out what would happen without going down this rabbit hole really though, after all, the src parameter passed to inet_ntop is the value that we see here outside the mapped space.
+
+So the real interesting question is, why is the Ebo code continuously incrementing this src address in a loop without breaking?
+
+To do this, we looked back at the loop and tried to understand why it wasn't exiting. We see that the counter `v54` need to be >= `v50` for it to exit. Using tenet I can see the value of `*(v46+549)` is `0xe8c`. Using tenet's memory view, I can actually go to the previous write to this address and see it came from just a bit above the loop:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis6.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
+
+So it's an index off the first parameter to this function, a1, that is responsible for the value the loop is counting to.
+
+So I can go to the call to this function and check the memory around this area:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis7.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
+
+the `80 0e` is the value, it just got incremented by 0xc later on.
+
+So I can check the previous write again and go back further:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis8.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
+
+Oh cool, it's further up the `handle_decrypted_packet` at `0x001549BE` function where the value is written. We can check the logic around this area to see why what was written got written and why.
+
 
 # Vulnerabilites
 
