@@ -331,11 +331,13 @@ So we can check the previous write again and go back further:
 
 Oh cool, it's further up the `handle_decrypted_packet` at `0x001549BE` function where the value is written. We can check the logic around this area to see why what was written got written and why.
 
-After looking at a packet that crashed it we saw how it lined up. It turns out the value to compare for how many loops are is the bytes at offsets 0x2C and 0x2D in a packet that takes branch value 0x1005.
+After looking at a packet that crashed it we saw how it lined up. It turns out the value that decides the loop break condition is controlled by the bytes at offsets 0x2C and 0x2D in a packet that takes branch value 0x1005.
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/segfault_packet.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
 
-The packet above causes a segfault. We see the branch value at offset 0x08 and 0x09 which because of endianess looks like 0x510, but is really used as 0x1005. Then we see the value that will determine the number of times to loop at offset 0x2D and 0x2D which will turn out to be 0x8180 again due to endianess. Each one of those loops will increment the heap address by 0x10. In total it would increment try 0x80180 which is larger than the mapped space for it, so eventually it would increment out of its mapping and attempt to read unmapped memory which results in a segfault.
+The packet above causes a segfault. We see the branch value at offset 0x08 and 0x09 which is 0x510 but, but is really 0x1005 because of endianess. Then we see the value that will determine the number of times to loop at offset 0x2D and 0x2D which will turn out to be 0x8180 again due to endianess. Each one of those loops will increment the heap address by 0x10. In total it would increment try 0x80180 which is larger than the mapped space for it, so eventually it would increment out of its mapping and attempt to read unmapped memory which results in a segfault.
+
+This isn't exploitable because we can't control anything written to the heap. It just keeps indexing the heap address and that's it.
 
 
 # The Vulnerability
@@ -448,7 +450,7 @@ In the response from our server it checks for
 `.tar` or `.zip`
 and `\r\n\r\n`
 
-Once it validates the response contains all these paramters, it will open a file with the given filename for writing and then keep receiving the data of the upgrade file in tcp packets. Once it stops receiving data or doesn't receive data it will close the file, and that's when we noticed a different spot for command injection.
+Once it validates the response contains all these parameters, it will open a file with the given filename for writing and then keep receiving the data of the upgrade file in tcp packets. Once it stops receiving data or doesn't receive data it will close the file, and that's when we noticed a different spot for command injection.
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/command_injection.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
 
