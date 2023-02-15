@@ -331,19 +331,14 @@ So we can check the previous write again and go back further:
 
 Oh cool, it's further up the `handle_decrypted_packet` at `0x001549BE` function where the value is written. We can check the logic around this area to see why what was written got written and why.
 
-It turns out the value to compare for how many loops are taken is when branch 0x1005 is taken. The bytes at offsets 0x2C and 0x2D control what the loop counter has to reach before breaking.
+After looking at a packet that crashed it we saw how it lined up. It turns out the value to compare for how many loops are is the bytes at offsets 0x2C and 0x2D in a packet that takes branch value 0x1005.
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/segfault_packet.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
 
-So in the packet above that causes a segfault, we see the branch value at offset 0x08 and 0x09 which because of endianess looks like 0x510, but is really interpreted as 0x1005. Then we see the value that will determine the number of times to loop at offset 0x2D and 0x2D which will turn out to be 0x8180 again due to endianess. 
-
-----------------------------------------------------
-
-> TODO: figure out how to merge this into this section:
+The packet above causes a segfault. We see the branch value at offset 0x08 and 0x09 which because of endianess looks like 0x510, but is really used as 0x1005. Then we see the value that will determine the number of times to loop at offset 0x2D and 0x2D which will turn out to be 0x8180 again due to endianess. Each one of those loops will increment the heap address by 0x10. In total it would increment try 0x80180 which is larger than the mapped space for it, so eventually it would increment out of its mapping and attempt to read unmapped memory which results in a segfault.
 
 
-
-# Vulnerabilites
+# The Vulnerability
 
 After going through the crashes we found and being dissapointed we couldn't exploit them. We noticed something interesting on the device that never came through in the log messages. The ```ebo.cfg``` file had been modified with a bunch of random data in it. Normally it should look like this
 
