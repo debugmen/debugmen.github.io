@@ -225,55 +225,6 @@ We then set it up so it sent the initial connection packet so that it knew a dev
 
 The image above is the function that will take the packet after it has been unscrambled, and branch into these different section of code based on the initial branch value. So we would generate a completely random fuzzed packet, modify the branch value, adjust the size, and send the packet
 
-# Static Analysis on the crash
-
-Tenet was nice for analyzing the crash because we could easily see the register values throughout the crash trace:
-
-<p style="text-align:center;"><img src="/assets/enabot_part3/tenet_trace.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
-
-We could follow the crash into a libc function inet_ntop:
-
-<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis2.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
-
-We can then load up libc in IDA and go to the end of the trace:
-
-<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis3.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
-
-Looks like the trace ended one instruction before the crash, because the crash is at the next `ldrb` instruction. However we can get a clue by using tenet's "go to previous execution" on that instruction and keeping the current value of r6, `0xb2d63004` in mind.
-
-<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis4.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
-
-We see that r6 is `0xb2d62ff7`. When we look at the mapped regions, it looks like we are reaching the near of the area:
-
-<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis5.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
-
-We could have figured out what would happen without going down this rabbit hole really though, after all, the src parameter passed to inet_ntop is the value that we see here outside the mapped space.
-
-So the real interesting question is, why is the Ebo code continuously incrementing this src address in a loop without breaking?
-
-To do this, we looked back at the loop and tried to understand why it wasn't exiting. We see that the counter `v54` need to be >= `v50` for it to exit. Using tenet I can see the value of `*(v46+549)` is `0xe8c`. Using tenet's memory view, I can actually go to the previous write to this address and see it came from just a bit above the loop:
-
-<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis6.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
-
-So it's an index off the first parameter to this function, a1, that is responsible for the value the loop is counting to.
-
-So I can go to the call to this function and check the memory around this area:
-
-<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis7.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
-
-the `80 0e` is the value, it just got incremented by 0xc later on.
-
-So I can check the previous write again and go back further:
-
-<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis8.png" alt="ebocontrol" style="height: 100%; width:100%;"/></p>
-
-Oh cool, it's further up the `handle_decrypted_packet` at `0x001549BE` function where the value is written. We can check the logic around this area to see why what was written got written and why.
-
-
-----------------------------------------------------
-
-> TODO: figure out how to merge this into this section:
-
 Below is loop for our dumb fuzzer.
 
 ```python
@@ -332,7 +283,65 @@ The fuzzable variable was a sample packet that we grabbed and included the TUTK 
 
 The biggest benefit of this fuzzer is that it was insanely simple and quick to write. The downfall is Aside from the branch values, it's up to chance to hit all the different code blocks aside from that.
 
-Using this method we did find a few vulnerabilities, but they were not exploitable. 
+Using this method we did find a few vulnerabilities, but they were not exploitable. We quickly figured out why our snapshot fuzzer wasn't getting the same crashes, and then fixed it so it's coverage was better. After that we were seeing the same crashes as the radamsa fuzzer. In the next section we'll go through how we traiged one of the crashes and deemed how it wasn't exploitable.
+
+# Static Analysis on the crash
+
+After we got the crash in the emulated fuzzer, we generated a tenet trace of it. We mentioned how we did this in the snapshot fuzzing section.
+
+Tenet was nice for analyzing the crash because we could easily see the register values throughout the crash trace:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/tenet_trace.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
+
+We could follow the crash into a libc function inet_ntop:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis2.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
+
+We can then load up libc in IDA and go to the end of the trace since we know that's where the crash occurred:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis3.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
+
+Looks like the trace ended one instruction before the crash, because the crash is at the next `ldrb` instruction. However we can get a clue by using tenet's "go to previous execution" on that instruction and keeping the current value of r6, `0xb2d63004` in mind.
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis4.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
+
+We see that r6 is `0xb2d62ff7`. When we look at the mapped regions, it looks like we are reaching the near of the area:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis5.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
+
+We could have figured out what would happen without going down this rabbit hole really though, after all, the src parameter passed to inet_ntop is the value that we see here outside the mapped space.
+
+So the real interesting question is, why is the Ebo code continuously incrementing this src address in a loop without breaking?
+
+To do this, we looked back at the loop and tried to understand why it wasn't exiting. We see that the counter `v54` need to be >= `v50` for it to exit. Using tenet I can see the value of `*(v46+549)` is `0xe8c`. Using tenet's memory view, I can actually go to the previous write to this address and see it came from just a bit above the loop:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis6.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
+
+So it's an index off the first parameter to this function, a1, that is responsible for the value the loop is counting to.
+
+So we can go to the call to this function and check the memory around this area:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis7.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
+
+the `80 0e` is the value, it just got incremented by 0xc later on.
+
+So we can check the previous write again and go back further:
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/crash_analysis8.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
+
+Oh cool, it's further up the `handle_decrypted_packet` at `0x001549BE` function where the value is written. We can check the logic around this area to see why what was written got written and why.
+
+It turns out the value to compare for how many loops are taken is when branch 0x1005 is taken. The bytes at offsets 0x2C and 0x2D control what the loop counter has to reach before breaking.
+
+<p style="text-align:center;"><img src="/assets/enabot_part3/segfault_packet.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
+
+So in the packet above that causes a segfault, we see the branch value at offset 0x08 and 0x09 which because of endianess looks like 0x510, but is really interpreted as 0x1005. Then we see the value that will determine the number of times to loop at offset 0x2D and 0x2D which will turn out to be 0x8180 again due to endianess. 
+
+----------------------------------------------------
+
+> TODO: figure out how to merge this into this section:
+
+
 
 # Vulnerabilites
 
@@ -389,7 +398,7 @@ Conviently one of the mavlink commands also can trigger a soft reboot where the 
 
 # Exploitation
 
-Ultimately we wanted a shell on the device. This way we could get a shell, steal the saved tokens paired with the user's phone for connecting to the remote server, install a rootkit, and then place the token back on the device without there being a trace of what happened. This way we could have a rootkit on the device where we could access it at anytime, be able to use the ebo server, etc. and the owner could still use the ebo from their phone.
+Ultimately we wanted a shell on the device. This way we could get a shell, steal the saved server token, install something malicious in the firmware, and then place the token back on the device without there being a trace of what happened. This way we could access the device at any time with a reverse shell and be able to use the ebo server, etc. and the owner would have no clue.
 
 We'll go over the path of an upgrade to help better understand how we were able to exploit this vulnerability. First when we triggered an upgrade using the mavlink branch value ```0xcd```, we hit this section of the code where it enters handleUartUpgradeRequest.
 
