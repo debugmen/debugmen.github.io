@@ -167,7 +167,7 @@ Once we had the memory dump and registers, we needed to use an emulator. For thi
 
 So once we load the state into qiling and run the emulation to the end of the packet parsing function everything should just work right? Absolutely not! The first problem we were running into were functions that used malloc. We also ran into issues with it trying to do stuff with pthread functions, like pthread_mutex_lock. It would try to read from an address at a very high address that wasn't mapped, like `0xfffffbf0`. We weren't sure what this was doing, so we ended up using hooks to bypass these. So we ended up using unicorn's simple heap implementation instead inside of our hooks. This has disadvantages obviously, like we are no longer using the real malloc implementation, but we just kept going forward.
 
-> TODO: insert image of hooks
+<p style="text-align:center;"><img src="/assets/enabot_part3/syscalls.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
 
 You can also see that because we are using qiling, syscalls like gettimeofday are being handled nicely. However, for things like open fd's at the time of the snapshot, either through files on disk or sockets, they won't be emulated correctly. This is the main reason why we take our snapshot at the beginning of the function that decodes the unscrambled packet: we hope that we can find problems in the logic before the emulation diverges from the real thing. We know it's not going to be perfect, but with it we get the main advantages of emulating when it comes to this type of work: very easy to get coverage / traces. 
 
