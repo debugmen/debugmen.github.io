@@ -40,7 +40,6 @@ In our last post we described a crc check that was preventing us from using our 
 <details>
 <summary>Mavlink Packets Code</summary>
 <pre>
-```
 #include "stdint.h"
 #include "stdio.h"
 #include "stdlib.h"
@@ -145,7 +144,6 @@ cont:
 int main() {
     calc_crc(input);
 }
-```
 </pre>
 </details>
 
