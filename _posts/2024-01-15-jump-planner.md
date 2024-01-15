@@ -10,7 +10,9 @@ tags: playoff-rondo
 Author Write Up
 
 Category: PWN
+
 Difficulty: Hard
+
 Description: `we found an old time jump tool but were aware of the many vulns in it do we decided to app a jail around it to mitigate all the problems`
 
 Handout:
