@@ -5,6 +5,7 @@ title:  "corCTF: Chainblock"
 date:   2021-08-31 1:01:37 -0500
 categories: CTF-writeup
 ctf-category: PWN
+tags: playoff-rondo
 ---
 
 This was a simple challenge that doesn't really need a writeup, however I am addicted to Binaryninja so maybe I can get a free license out of this.

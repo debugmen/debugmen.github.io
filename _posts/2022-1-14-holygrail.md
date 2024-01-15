@@ -5,6 +5,7 @@ title:  "Battelle Winter CTF: HolyGrailOfRop"
 date:   2022-01-14 6:01:37 -0500
 categories: CTF-writeup
 ctf-category: PWN
+tags: playoff-rondo
 ---
 HolyGrailOfRop was an automated exploit generation challenge for the Battelle Winter Beginner CTF made by ScotchAndSplenda.
 

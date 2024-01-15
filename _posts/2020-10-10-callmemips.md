@@ -5,6 +5,7 @@ title:  "ROPemporium: CallMe MIPS"
 date:   2020-10-10 18:01:37 -0500
 categories: CTF-writeup
 ctf-category: PWN
+tags: playoff-rondo
 ---
 
 # callme MIPS

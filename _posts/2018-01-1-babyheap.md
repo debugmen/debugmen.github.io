@@ -5,6 +5,7 @@ title:  "0CTF 2017: Babyheap"
 date:   2018-01-1 1:01:37 -0500
 categories: CTF-writeup
 ctf-category: PWN
+tags: playoff-rondo
 ---
 # BabyHeap Solve
 

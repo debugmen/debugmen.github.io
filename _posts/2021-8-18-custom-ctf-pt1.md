@@ -4,6 +4,7 @@ author: playoff-rondo
 title:  "Custom CTF Platforms: Part 1"
 date:   2021-08-18 1:01:37 -0500
 categories: general
+tags: playoff-rondo
 ---
 Over the past 8ish years I've played CTFs, I created a couple CTF platforms with a some help from some friends. This was before CTFd was a thing and every CTF seemed to have their own custom platform.
 

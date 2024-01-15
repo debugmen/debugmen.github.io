@@ -5,6 +5,7 @@ title:  "Tokyo Westerns CTF 2020: Nothing More to Say"
 date:   2020-09-20 18:01:37 -0500
 categories: CTF-writeup
 ctf-category: PWN
+tags: playoff-rondo
 ---
 # Nothing More to Say
 

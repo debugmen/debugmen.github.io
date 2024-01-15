@@ -5,6 +5,7 @@ title:  "zh3r0 CTF: BabyArmRop"
 date:   2021-06-05 1:01:37 -0500
 categories: CTF-writeup
 ctf-category: PWN
+tags: playoff-rondo
 ---
 
 # BabyArmROP (PWN)
